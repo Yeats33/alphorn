@@ -65,10 +65,11 @@ describe("ntfy channel", () => {
   });
 
   it("keeps the ntfy URL and bearer authentication unchanged", async () => {
-    const { url, headers } = await sendWithPriority(4);
-    expect(url).toBe("https://ntfy.example.com/alerts");
+    const { url, headers, body } = await sendWithPriority(4);
+    expect(url).toBe("https://ntfy.example.com/");
     expect(headers.Authorization).toBe("Bearer tk_test");
-    expect(headers["Content-Type"]).toBe("application/json; charset=utf-8");
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(body.topic).toBe("alerts");
   });
 
   it("sends Unicode title, message, and tags in the UTF-8 JSON body", async () => {
@@ -87,9 +88,35 @@ describe("ntfy channel", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
+      topic: "alerts",
       title: "配置完成",
       message: "中文通知已送达",
       tags: ["完成", "通知"],
     });
+  });
+
+  it("normalizes a trailing slash and always publishes JSON to the root URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await handler.send(
+      { ...config, serverUrl: "https://ntfy.example.com/" },
+      { title: null, message: "Test" },
+      context,
+    );
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://ntfy.example.com/");
+  });
+
+  it("validates ntfy topic syntax and length", () => {
+    expect(
+      handler.configSchema.safeParse({ ...config, topic: "valid_topic-1" }).success,
+    ).toBe(true);
+    expect(
+      handler.configSchema.safeParse({ ...config, topic: "invalid topic" }).success,
+    ).toBe(false);
+    expect(
+      handler.configSchema.safeParse({ ...config, topic: "a".repeat(65) }).success,
+    ).toBe(false);
   });
 });

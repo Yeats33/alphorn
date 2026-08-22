@@ -2,7 +2,6 @@ import { z } from "zod";
 import { registerChannel } from "./registry";
 import { fetchWithTimeout } from "./fetch";
 import { throwIfNotOk } from "./errors";
-import { joinUrl } from "./utils";
 import { meta } from "./ntfy.meta";
 
 function toNtfyPriorityId(priority: number): number {
@@ -14,7 +13,14 @@ const configSchema = z.object({
     .string()
     .url("Must be a valid URL")
     .default("https://ntfy.sh"),
-  topic: z.string().min(1, "Topic is required"),
+  topic: z
+    .string()
+    .min(1, "Topic is required")
+    .max(64, "Topic must be 64 characters or fewer")
+    .regex(
+      /^[-_A-Za-z0-9]+$/,
+      "Topic may contain only letters, numbers, underscores, and dashes",
+    ),
   accessToken: z.string().optional(),
 });
 
@@ -24,9 +30,10 @@ registerChannel({
   async send(config, notification) {
     const { serverUrl, topic, accessToken } = config;
     const headers: Record<string, string> = {
-      "Content-Type": "application/json; charset=utf-8",
+      "Content-Type": "application/json",
     };
     const payload: Record<string, unknown> = {
+      topic,
       message: notification.message,
     };
     if (notification.title) payload.title = notification.title;
@@ -42,7 +49,7 @@ registerChannel({
       headers["Authorization"] = `Bearer ${accessToken}`;
     }
     const res = await fetchWithTimeout(
-      joinUrl(serverUrl, topic),
+      `${serverUrl.replace(/\/+$/, "")}/`,
       {
         method: "POST",
         headers,
