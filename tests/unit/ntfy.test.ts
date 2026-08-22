@@ -39,7 +39,7 @@ async function sendWithPriority(priority?: number) {
 
 describe("ntfy channel", () => {
   it.each([1, 2, 3, 4, 5])(
-    "preserves Alphorn priority %i as the same ntfy priority",
+    "maps Alphorn priority %i to the matching ntfy priority ID",
     async (priority) => {
       const { headers } = await sendWithPriority(priority);
       expect(headers["X-Priority"]).toBe(String(priority));

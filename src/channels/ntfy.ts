@@ -5,7 +5,7 @@ import { throwIfNotOk } from "./errors";
 import { joinUrl } from "./utils";
 import { meta } from "./ntfy.meta";
 
-function normalizeNtfyPriority(priority: number): string {
+function toNtfyPriorityId(priority: number): string {
   return String(Math.min(5, Math.max(1, Math.round(priority))));
 }
 
@@ -28,9 +28,9 @@ registerChannel({
       headers["X-Title"] = notification.title;
     }
     if (notification.priority != null) {
-      // Alphorn and ntfy share the same 1-5 priority scale. Preserve the
-      // numeric value instead of translating it to a second representation.
-      headers["X-Priority"] = normalizeNtfyPriority(notification.priority);
+      // ntfy defines priority IDs 1..5 (min, low, default, high, max). Convert
+      // at the provider boundary and keep all ntfy-specific rules local here.
+      headers["X-Priority"] = toNtfyPriorityId(notification.priority);
     }
     if (notification.tags?.length) {
       headers["X-Tags"] = notification.tags.join(",");

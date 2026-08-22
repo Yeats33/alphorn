@@ -17,7 +17,7 @@ export const meta: ChannelMeta = {
     "Install the ntfy app on your phone or use the web UI at `https://ntfy.sh/my-topic` to subscribe.",
     "",
     "**Priority mapping**",
-    "Alphorn priorities are sent to ntfy unchanged: `1 Min`, `2 Low`, `3 Default`, `4 High`, and `5 Urgent`. If no priority is set, ntfy uses its default.",
+    "The Ntfy adapter converts message priority to ntfy's IDs: `1 Min`, `2 Low`, `3 Default`, `4 High`, and `5 Max/Urgent`. If no priority is set, ntfy uses its default.",
     "",
     "**Optional: Access token**",
     "If your server requires authentication, create an access token in your ntfy server settings.",
