@@ -5,8 +5,8 @@ import { throwIfNotOk } from "./errors";
 import { joinUrl } from "./utils";
 import { meta } from "./ntfy.meta";
 
-function toNtfyPriorityId(priority: number): string {
-  return String(Math.min(5, Math.max(1, Math.round(priority))));
+function toNtfyPriorityId(priority: number): number {
+  return Math.min(5, Math.max(1, Math.round(priority)));
 }
 
 const configSchema = z.object({
@@ -23,17 +23,20 @@ registerChannel({
   configSchema,
   async send(config, notification) {
     const { serverUrl, topic, accessToken } = config;
-    const headers: Record<string, string> = {};
-    if (notification.title) {
-      headers["X-Title"] = notification.title;
-    }
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json; charset=utf-8",
+    };
+    const payload: Record<string, unknown> = {
+      message: notification.message,
+    };
+    if (notification.title) payload.title = notification.title;
     if (notification.priority != null) {
       // ntfy defines priority IDs 1..5 (min, low, default, high, max). Convert
       // at the provider boundary and keep all ntfy-specific rules local here.
-      headers["X-Priority"] = toNtfyPriorityId(notification.priority);
+      payload.priority = toNtfyPriorityId(notification.priority);
     }
     if (notification.tags?.length) {
-      headers["X-Tags"] = notification.tags.join(",");
+      payload.tags = notification.tags;
     }
     if (accessToken) {
       headers["Authorization"] = `Bearer ${accessToken}`;
@@ -43,7 +46,7 @@ registerChannel({
       {
         method: "POST",
         headers,
-        body: notification.message,
+        body: JSON.stringify(payload),
       }
     );
     await throwIfNotOk(res, "Ntfy");
