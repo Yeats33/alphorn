@@ -1,3 +1,14 @@
+## Yeats33 self-hosted enhancements
+
+This fork tracks upstream Alphorn and adds focused improvements for a personal, centrally managed notification gateway:
+
+- ✅ **Nekoko SMS channel — available now.** Native [eSIM.GG](https://esim.gg/) / Nekoko Telecom SMS delivery with API key, sender number, recipient number, safely encoded dynamic message bodies, delivery retries, and a dedicated channel icon based on the official eSIM.GG brand asset. The test action sends a real SMS.
+- 🚧 **Output-channel fallback — planned, not yet implemented.** Keep the existing `Send to all` fan-out mode and add an ordered `First successful` mode, so a message can try channels such as Telegram → Email → Nekoko SMS and stop after the first successful delivery. Every new message starts with the primary channel, providing automatic failback after recovery.
+
+The current runtime still uses fan-out delivery for enabled output channels. Follow the [`selfhost`](https://github.com/Yeats33/alphorn/tree/selfhost) branch for these custom changes.
+
+---
+
 <div align="center">
 
 # Alphorn
@@ -36,7 +47,7 @@ Think of it as a self-hosted alternative to commercial notification hubs, built 
 ### Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/alphorn-dev/alphorn.git
+git clone --branch selfhost https://github.com/Yeats33/alphorn.git
 cd alphorn
 cp .env.example .env
 # edit .env — at minimum set BETTER_AUTH_SECRET
