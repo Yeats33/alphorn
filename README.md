@@ -3,9 +3,9 @@
 This fork tracks upstream Alphorn and adds focused improvements for a personal, centrally managed notification gateway:
 
 - ✅ **Nekoko SMS channel — available now.** Native [eSIM.GG](https://esim.gg/) / Nekoko Telecom SMS delivery with API key, sender number, recipient number, safely encoded dynamic message bodies, delivery retries, and a dedicated channel icon based on the official eSIM.GG brand asset. The test action sends a real SMS.
-- 🚧 **Output-channel fallback — planned, not yet implemented.** Keep the existing `Send to all` fan-out mode and add an ordered `First successful` mode, so a message can try channels such as Telegram → Email → Nekoko SMS and stop after the first successful delivery. Every new message starts with the primary channel, providing automatic failback after recovery.
+- ✅ **Level-based output-channel failover — available now.** Assign each output channel a custom level from 1–99. Channels in the same level send in parallel; the next configured level starts only when every applicable channel in the current level permanently fails. Every new message starts at the lowest applicable level, providing automatic failback after recovery.
 
-The current runtime still uses fan-out delivery for enabled output channels. Follow the [`selfhost`](https://github.com/Yeats33/alphorn/tree/selfhost) branch for these custom changes.
+Existing configurations remain fully compatible: all pre-existing channels default to level 1, which preserves the original fan-out behavior. Follow the [`selfhost`](https://github.com/Yeats33/alphorn/tree/selfhost) branch for these custom changes.
 
 ---
 
@@ -32,7 +32,8 @@ Think of it as a self-hosted alternative to commercial notification hubs, built 
 
 ## Features
 
-- **20+ delivery channels** — Slack, Discord, Microsoft Teams, Telegram, Mattermost, Rocket.Chat, Google Chat, Zulip, Matrix, ntfy, Gotify, Pushover, PagerDuty, Opsgenie, Twilio SMS, Vonage SMS, SMTP, SendGrid, Mailgun, generic Webhook, SSE, and more.
+- **20+ delivery channels** — Slack, Discord, Microsoft Teams, Telegram, Mattermost, Rocket.Chat, Google Chat, Zulip, Matrix, ntfy, Gotify, Pushover, PagerDuty, Opsgenie, Twilio SMS, Vonage SMS, Nekoko SMS, SMTP, SendGrid, Mailgun, generic Webhook, SSE, and more.
+- **Ordered channel failover** — group outputs into custom levels, fan out within a level, advance only after all channels in that level fail, and automatically return to the primary level for each new message.
 - **Powerful filter DSL** — route messages by priority, tags, title, body, or payload fields. Regex supported (safely).
 - **Reliable delivery** — pg-boss queue with retries (5 attempts, exponential backoff), permanent vs. transient error handling, 7-day job retention.
 - **Real-time streaming** — SSE endpoint for live event feeds. Dedicated SSE server for horizontally scaled deployments.
