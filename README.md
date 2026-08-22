@@ -43,19 +43,45 @@ Think of it as a self-hosted alternative to commercial notification hubs, built 
 - **Observable** — structured Pino logs and Sentry integration out of the box.
 - **Self-hostable first** — one `docker compose up` away. No cloud lock-in, no mandatory external services.
 
-## Quick start
+## Production deployment
 
-### Docker Compose (recommended)
+### Docker on a VPS
 
 ```bash
 git clone --branch selfhost https://github.com/Yeats33/alphorn.git
 cd alphorn
-cp .env.example .env
-# edit .env — at minimum set BETTER_AUTH_SECRET
-docker compose up -d
+cp deploy/compose/.env.example deploy/compose/.env
+# Replace POSTGRES_PASSWORD, BETTER_AUTH_SECRET, and BETTER_AUTH_URL.
+docker compose \
+  --env-file deploy/compose/.env \
+  -f deploy/compose/compose.yml \
+  -f deploy/compose/compose.vps.yml \
+  up -d --build
 ```
 
-Open <http://localhost:3000> and create your first account.
+The VPS overlay binds Alphorn to `127.0.0.1:3000` for a local reverse proxy.
+See the [production Docker guide](docs/deployment/docker.md) for HTTPS,
+backups, upgrades, health checks, and 1Panel/OpenResty configuration.
+
+### Cloudflare Tunnel
+
+Use the Cloudflare overlay instead of the VPS overlay to publish no host ports:
+
+```bash
+docker compose \
+  --env-file deploy/compose/.env \
+  -f deploy/compose/compose.yml \
+  -f deploy/compose/compose.cloudflare.yml \
+  up -d --build
+```
+
+Create a remotely managed Tunnel whose public hostname points to
+`http://alphorn:3000`, then place its connector token in
+`deploy/compose/.env`. See the [Cloudflare deployment
+guide](docs/deployment/cloudflare.md).
+
+The full application still runs in Docker because it requires PostgreSQL and
+background workers; Cloudflare provides Tunnel/DNS/TLS/WAF ingress.
 
 ### Local development
 
