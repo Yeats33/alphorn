@@ -58,6 +58,9 @@ export default function NewWebhookForm({
         channelLevels: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.level])
         ),
+        channelAlwaysDeliveries: Object.fromEntries(
+          selectedChannels.map((s) => [s.channelId, s.alwaysDeliver])
+        ),
         titleTemplate: titleTemplate || null,
         messageTemplate: messageTemplate || null,
         tagsTemplate: tagsTemplate || null,

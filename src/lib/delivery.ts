@@ -4,6 +4,7 @@ import { getQueue, DELIVERY_QUEUE } from "./queue";
 export interface DeliveryTarget {
   channelId: string;
   level: number;
+  alwaysDeliver?: boolean;
 }
 
 export interface PersistMessageInput {
@@ -22,10 +23,14 @@ export async function persistMessageAndEnqueueDeliveries(
 ): Promise<{ messageId: string }> {
   const { webhookId, title, message, priority, tags, payload, channels, trace } =
     input;
+  const failoverChannels = channels.filter((channel) => !channel.alwaysDeliver);
   const activeLevel =
-    channels.length > 0 ? Math.min(...channels.map((channel) => channel.level)) : null;
+    failoverChannels.length > 0
+      ? Math.min(...failoverChannels.map((channel) => channel.level))
+      : null;
   const channelIds = channels.map((channel) => channel.channelId);
   const channelLevels = channels.map((channel) => channel.level);
+  const channelAlwaysDeliver = channels.map((channel) => channel.alwaysDeliver ?? false);
 
   // Warm the queue client while we write so its start-up overlaps with the DB.
   const queuePromise = channels.length > 0 ? getQueue() : null;
@@ -48,19 +53,25 @@ export async function persistMessageAndEnqueueDeliveries(
       RETURNING "id"
     ),
     d AS (
-      INSERT INTO "Delivery" ("messageId", "channelId", "level", "status", "updatedAt")
+      INSERT INTO "Delivery"
+        ("messageId", "channelId", "level", "alwaysDeliver", "status", "updatedAt")
       SELECT
         m."id",
         c.channel_id,
         c.level,
+        c.always_deliver,
         CASE
-          WHEN c.level = ${activeLevel} THEN 'PENDING'::"DeliveryStatus"
+          WHEN c.always_deliver OR c.level = ${activeLevel}
+            THEN 'PENDING'::"DeliveryStatus"
           ELSE 'WAITING'::"DeliveryStatus"
         END,
         now()
       FROM m
-      CROSS JOIN unnest(${channelIds}::text[], ${channelLevels}::int[])
-        AS c(channel_id, level)
+      CROSS JOIN unnest(
+        ${channelIds}::text[],
+        ${channelLevels}::int[],
+        ${channelAlwaysDeliver}::boolean[]
+      ) AS c(channel_id, level, always_deliver)
       RETURNING "id", "status"
     )
     SELECT

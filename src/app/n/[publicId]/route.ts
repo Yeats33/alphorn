@@ -199,6 +199,7 @@ export async function POST(
     channels: enabledChannels.map((wc) => ({
       channelId: wc.channelId,
       level: wc.level,
+      alwaysDeliver: wc.alwaysDeliver,
     })),
     trace: [...verifiedTrace, webhook.publicId],
   });

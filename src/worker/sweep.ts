@@ -41,7 +41,7 @@ async function markStaleDeliveries() {
       attempts: 0,
       updatedAt: { lt: staleThreshold },
     },
-    select: { id: true, messageId: true, level: true },
+    select: { id: true, messageId: true, level: true, alwaysDeliver: true },
     take: 500,
   });
   if (candidates.length === 0) return;
@@ -62,6 +62,7 @@ async function markStaleDeliveries() {
     logger.warn({ count, staleDurationMs: STALE_AFTER_MS }, "Marked stale deliveries");
     const levels = new Map<string, { messageId: string; level: number }>();
     for (const delivery of candidates) {
+      if (delivery.alwaysDeliver) continue;
       levels.set(`${delivery.messageId}:${delivery.level}`, {
         messageId: delivery.messageId,
         level: delivery.level,

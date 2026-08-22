@@ -41,11 +41,11 @@ export async function advanceFailoverIfLevelFailed({
     `;
 
     const delivered = await tx.delivery.count({
-      where: { messageId, status: "DELIVERED" },
+      where: { messageId, alwaysDeliver: false, status: "DELIVERED" },
     });
     if (delivered > 0) {
       await tx.delivery.updateMany({
-        where: { messageId, status: "WAITING" },
+        where: { messageId, alwaysDeliver: false, status: "WAITING" },
         data: { status: "SKIPPED" },
       });
       return { state: "succeeded" as const };
@@ -54,6 +54,7 @@ export async function advanceFailoverIfLevelFailed({
     const currentLevelActive = await tx.delivery.count({
       where: {
         messageId,
+        alwaysDeliver: false,
         level: failedLevel,
         status: { in: ["WAITING", "PENDING", "PROCESSING", "RETRYING"] },
       },
@@ -65,6 +66,7 @@ export async function advanceFailoverIfLevelFailed({
     const higherLevelActive = await tx.delivery.count({
       where: {
         messageId,
+        alwaysDeliver: false,
         level: { gt: failedLevel },
         status: { in: ["PENDING", "PROCESSING", "RETRYING"] },
       },
@@ -76,6 +78,7 @@ export async function advanceFailoverIfLevelFailed({
     const next = await tx.delivery.findFirst({
       where: {
         messageId,
+        alwaysDeliver: false,
         level: { gt: failedLevel },
         status: "WAITING",
       },
@@ -93,6 +96,7 @@ export async function advanceFailoverIfLevelFailed({
         "updatedAt" = now()
       WHERE
         "messageId" = ${messageId}::uuid
+        AND NOT "alwaysDeliver"
         AND "level" = ${next.level}
         AND "status" = 'WAITING'::"DeliveryStatus"
       RETURNING "id"::text

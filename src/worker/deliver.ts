@@ -84,11 +84,13 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
         lastError: `Unknown channel type: ${delivery.channel.type}`,
       },
     });
-    await advanceFailoverIfLevelFailed({
-      messageId: delivery.messageId,
-      failedLevel: delivery.level,
-      trace: data.trace,
-    });
+    if (!delivery.alwaysDeliver) {
+      await advanceFailoverIfLevelFailed({
+        messageId: delivery.messageId,
+        failedLevel: delivery.level,
+        trace: data.trace,
+      });
+    }
     await notifyFailure(delivery.id);
     return;
   }
@@ -116,13 +118,16 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
         deliveredAt: new Date(),
       },
     });
-    await prisma.delivery.updateMany({
-      where: {
-        messageId: delivery.messageId,
-        status: "WAITING",
-      },
-      data: { status: "SKIPPED" },
-    });
+    if (!delivery.alwaysDeliver) {
+      await prisma.delivery.updateMany({
+        where: {
+          messageId: delivery.messageId,
+          alwaysDeliver: false,
+          status: "WAITING",
+        },
+        data: { status: "SKIPPED" },
+      });
+    }
 
     jobLogger.debug({ channelName: delivery.channel.name }, "Delivery succeeded");
   } catch (err) {
@@ -141,22 +146,26 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
 
     if (permanent) {
       jobLogger.error({ error: errorMessage, err, attempts: updated.attempts }, "Delivery permanently failed (non-retryable)");
-      await advanceFailoverIfLevelFailed({
-        messageId: delivery.messageId,
-        failedLevel: delivery.level,
-        trace: data.trace,
-      });
+      if (!delivery.alwaysDeliver) {
+        await advanceFailoverIfLevelFailed({
+          messageId: delivery.messageId,
+          failedLevel: delivery.level,
+          trace: data.trace,
+        });
+      }
       await notifyFailure(delivery.id);
       return;
     }
 
     if (terminal) {
       jobLogger.error({ error: errorMessage, err, attempts: updated.attempts, maxRetries: MAX_RETRIES }, "Delivery permanently failed");
-      await advanceFailoverIfLevelFailed({
-        messageId: delivery.messageId,
-        failedLevel: delivery.level,
-        trace: data.trace,
-      });
+      if (!delivery.alwaysDeliver) {
+        await advanceFailoverIfLevelFailed({
+          messageId: delivery.messageId,
+          failedLevel: delivery.level,
+          trace: data.trace,
+        });
+      }
       await notifyFailure(delivery.id);
     } else {
       jobLogger.warn({ error: errorMessage, attempts: updated.attempts }, "Delivery failed, will retry");

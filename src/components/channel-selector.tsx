@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { FilterBuilder } from "@/components/filter-builder";
 import { FilterTestPanel } from "@/components/filter-test-panel";
 import { ChannelIcon } from "@/components/channel-icons";
@@ -35,7 +36,10 @@ export function ChannelSelector({
       onChange(selected.filter((s) => s.channelId !== id));
       if (expandedChannel === id) setExpandedChannel(null);
     } else {
-      onChange([...selected, { channelId: id, filter: null, level: 1 }]);
+      onChange([
+        ...selected,
+        { channelId: id, filter: null, level: 1, alwaysDeliver: false },
+      ]);
     }
   }
 
@@ -63,6 +67,20 @@ export function ChannelSelector({
 
   function getLevel(channelId: string): number {
     return selected.find((s) => s.channelId === channelId)?.level ?? 1;
+  }
+
+  function updateAlwaysDeliver(channelId: string, alwaysDeliver: boolean) {
+    onChange(
+      selected.map((selection) =>
+        selection.channelId === channelId
+          ? { ...selection, alwaysDeliver }
+          : selection
+      )
+    );
+  }
+
+  function getAlwaysDeliver(channelId: string): boolean {
+    return selected.find((s) => s.channelId === channelId)?.alwaysDeliver ?? false;
   }
 
   if (channels.length === 0) {
@@ -106,7 +124,7 @@ export function ChannelSelector({
                     </Badge>
                   )}
                   <Badge variant="outline" className="text-xs">
-                    Level {getLevel(ch.id)}
+                    {getAlwaysDeliver(ch.id) ? "Always" : `Level ${getLevel(ch.id)}`}
                   </Badge>
                   <Button
                     type="button"
@@ -130,6 +148,24 @@ export function ChannelSelector({
 
             {isSelected && isExpanded && (
               <div className="border-t px-3 pb-3 pt-2 space-y-3">
+                <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={`channel-always-${ch.id}`}>
+                      Always deliver
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Send independently for every matching message. Its result
+                      does not stop or advance the failover chain.
+                    </p>
+                  </div>
+                  <Switch
+                    id={`channel-always-${ch.id}`}
+                    checked={getAlwaysDeliver(ch.id)}
+                    onCheckedChange={(checked) =>
+                      updateAlwaysDeliver(ch.id, checked)
+                    }
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor={`channel-level-${ch.id}`}>
                     Failover level
@@ -141,12 +177,13 @@ export function ChannelSelector({
                     max={99}
                     value={getLevel(ch.id)}
                     onChange={(event) => updateLevel(ch.id, event.target.value)}
+                    disabled={getAlwaysDeliver(ch.id)}
                     className="w-24"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Channels at the same level send in parallel. The next
-                    configured level starts only if every channel in this level
-                    ultimately fails.
+                    {getAlwaysDeliver(ch.id)
+                      ? "Level is ignored while Always deliver is enabled."
+                      : "Channels at the same level send in parallel. The next configured level starts only if every channel in this level ultimately fails."}
                   </p>
                 </div>
                 <div>

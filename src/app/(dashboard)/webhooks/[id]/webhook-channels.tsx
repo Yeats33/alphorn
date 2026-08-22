@@ -26,6 +26,7 @@ interface WebhookChannel {
   filter: unknown;
   enabled: boolean;
   level: number;
+  alwaysDeliver: boolean;
   channel: { name: string; type: string };
 }
 
@@ -53,6 +54,7 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         channelId: wc.channelId,
         filter: (wc.filter as FilterDefinition | null) ?? null,
         level: wc.level,
+        alwaysDeliver: wc.alwaysDeliver,
       }))
     );
     Promise.all([getChannelsForOrg(), getAllTagsForOrg()]).then(([chs, tags]) => {
@@ -105,6 +107,9 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         channelLevels: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.level])
         ),
+        channelAlwaysDeliveries: Object.fromEntries(
+          selectedChannels.map((s) => [s.channelId, s.alwaysDeliver])
+        ),
       });
       const currentById = new Map(
         channels.map((channel) => [channel.channelId, channel]),
@@ -120,6 +125,7 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
             channelId: selection.channelId,
             filter: selection.filter,
             level: selection.level,
+            alwaysDeliver: selection.alwaysDeliver,
             enabled: current?.enabled ?? true,
             channel: {
               name: current?.channel.name ?? option?.name ?? selection.channelId,
@@ -137,14 +143,39 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
     }
   }
 
+  const channelGroups = [
+    {
+      key: "always",
+      label: "Always",
+      detail: "Independent",
+      channels: channels.filter((channel) => channel.alwaysDeliver),
+    },
+    ...Array.from(
+      new Set(
+        channels
+          .filter((channel) => !channel.alwaysDeliver)
+          .map((channel) => channel.level),
+      ),
+    )
+      .sort((a, b) => a - b)
+      .map((level) => ({
+        key: `level-${level}`,
+        label: `Level ${level}`,
+        detail: level === 1 ? "Primary" : "Fallback",
+        channels: channels.filter(
+          (channel) => !channel.alwaysDeliver && channel.level === level,
+        ),
+      })),
+  ].filter((group) => group.channels.length > 0);
+
   if (editing) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>Output Channels</CardTitle>
           <CardDescription>
-            Select channels, configure filters, and assign failover levels.
-            Channels in the same level send in parallel.
+            Select channels, configure filters, assign failover levels, or mark
+            independent channels as Always.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -205,23 +236,17 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           </p>
         ) : (
           <div className="space-y-4">
-            {Array.from(new Set(channels.map((channel) => channel.level)))
-              .sort((a, b) => a - b)
-              .map((level) => (
-                <div key={level} className="space-y-2">
+            {channelGroups.map((group) => (
+                <div key={group.key} className="space-y-2">
                   <div className="flex items-center gap-2">
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Level {level}
+                      {group.label}
                     </p>
-                    {level === 1 && (
-                      <span className="text-xs text-muted-foreground">
-                        Primary
-                      </span>
-                    )}
+                    <span className="text-xs text-muted-foreground">
+                      {group.detail}
+                    </span>
                   </div>
-                  {channels
-                    .filter((channel) => channel.level === level)
-                    .map((wc) => (
+                  {group.channels.map((wc) => (
                       <div
                         key={wc.channelId}
                         className="flex items-center gap-3 rounded-md border px-3 py-2"

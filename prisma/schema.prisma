@@ -219,13 +219,14 @@ model Channel {
 }
 
 model WebhookChannel {
-  webhookId String
-  channelId String
-  filter    Json?
-  enabled   Boolean @default(true)
-  level     Int     @default(1)
-  webhook   Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  webhookId     String
+  channelId     String
+  filter        Json?
+  enabled       Boolean @default(true)
+  level         Int     @default(1)
+  alwaysDeliver Boolean @default(false)
+  webhook       Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  channel       Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@id([webhookId, channelId])
 }
@@ -247,22 +248,23 @@ model Message {
 }
 
 model Delivery {
-  id          String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  messageId   String         @db.Uuid
-  message     Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  channelId   String
-  channel     Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  level       Int            @default(1)
-  status      DeliveryStatus @default(PENDING)
-  attempts    Int            @default(0)
-  lastError   String?
-  pgbossJobId String?
-  deliveredAt DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  messageId     String         @db.Uuid
+  message       Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  channelId     String
+  channel       Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  level         Int            @default(1)
+  alwaysDeliver Boolean        @default(false)
+  status        DeliveryStatus @default(PENDING)
+  attempts      Int            @default(0)
+  lastError     String?
+  pgbossJobId   String?
+  deliveredAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([messageId, createdAt])
-  @@index([messageId, level, status])
+  @@index([messageId, alwaysDeliver, level, status])
   @@index([channelId, status, createdAt])
   @@index([status, createdAt])
 }

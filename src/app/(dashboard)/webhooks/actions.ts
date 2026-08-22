@@ -23,6 +23,7 @@ const webhookTemplatesSchema = z.object({
 });
 
 const channelLevelSchema = z.number().int().min(1).max(99);
+const channelAlwaysDeliverSchema = z.boolean();
 
 function channelLevel(
   channelId: string,
@@ -38,6 +39,15 @@ function validateChannelLevels(
   for (const channelId of channelIds) {
     channelLevel(channelId, channelLevels);
   }
+}
+
+function channelAlwaysDeliver(
+  channelId: string,
+  channelAlwaysDeliveries?: Record<string, boolean>,
+): boolean {
+  return channelAlwaysDeliverSchema.parse(
+    channelAlwaysDeliveries?.[channelId] ?? false,
+  );
 }
 
 function validateFilters(channelFilters?: Record<string, FilterDefinition | null>) {
@@ -97,6 +107,7 @@ export async function createWebhook(data: {
   channelIds: string[];
   channelFilters?: Record<string, FilterDefinition | null>;
   channelLevels?: Record<string, number>;
+  channelAlwaysDeliveries?: Record<string, boolean>;
   titleTemplate?: string | null;
   messageTemplate?: string | null;
   tagsTemplate?: string | null;
@@ -145,6 +156,10 @@ export async function createWebhook(data: {
           channelId,
           filter: data.channelFilters?.[channelId] ?? undefined,
           level: channelLevel(channelId, data.channelLevels),
+          alwaysDeliver: channelAlwaysDeliver(
+            channelId,
+            data.channelAlwaysDeliveries,
+          ),
         })),
       },
     },
@@ -164,6 +179,7 @@ export async function updateWebhook(
     channelIds: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
     channelLevels?: Record<string, number>;
+    channelAlwaysDeliveries?: Record<string, boolean>;
     titleTemplate?: string | null;
     messageTemplate?: string | null;
     tagsTemplate?: string | null;
@@ -206,6 +222,10 @@ export async function updateWebhook(
             channelId,
             filter: data.channelFilters?.[channelId] ?? undefined,
             level: channelLevel(channelId, data.channelLevels),
+            alwaysDeliver: channelAlwaysDeliver(
+              channelId,
+              data.channelAlwaysDeliveries,
+            ),
           })),
         },
       },
@@ -274,6 +294,7 @@ export async function updateWebhookChannels(
     channelIds: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
     channelLevels?: Record<string, number>;
+    channelAlwaysDeliveries?: Record<string, boolean>;
   }
 ) {
   const { orgId } = await requireAdminOrOwner();
@@ -296,6 +317,10 @@ export async function updateWebhookChannels(
           channelId,
           filter: data.channelFilters?.[channelId] ?? undefined,
           level: channelLevel(channelId, data.channelLevels),
+          alwaysDeliver: channelAlwaysDeliver(
+            channelId,
+            data.channelAlwaysDeliveries,
+          ),
         },
       })
     ),

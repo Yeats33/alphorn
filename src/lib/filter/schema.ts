@@ -118,6 +118,7 @@ export interface ChannelSelection {
   channelId: string;
   filter: FilterDefinition | null;
   level: number;
+  alwaysDeliver: boolean;
 }
 
 /**

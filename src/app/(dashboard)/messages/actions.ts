@@ -233,6 +233,7 @@ export async function sendTestMessage(
     channels: enabledChannels.map((wc) => ({
       channelId: wc.channelId,
       level: wc.level,
+      alwaysDeliver: wc.alwaysDeliver,
     })),
   });
 

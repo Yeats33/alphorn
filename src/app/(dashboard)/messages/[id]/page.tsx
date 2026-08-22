@@ -96,6 +96,7 @@ export default async function MessageDetailPage({
               id: d.id,
               channelId: d.channelId,
               level: d.level,
+              alwaysDeliver: d.alwaysDeliver,
               status: d.status,
               attempts: d.attempts,
               lastError: d.lastError,

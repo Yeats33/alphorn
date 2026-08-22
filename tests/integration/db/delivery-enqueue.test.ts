@@ -169,4 +169,42 @@ describe("persistMessageAndEnqueueDeliveries — integration", () => {
     const active = deliveries.find((delivery) => delivery.level === 1)!;
     expect(jobs[0]!.data.deliveryId).toBe(active.id);
   });
+
+  it("queues always deliveries independently of the failover chain", async () => {
+    const { webhookId, channelIds } = await seedWebhookWithChannels(3);
+
+    const { messageId } = await persistMessageAndEnqueueDeliveries({
+      webhookId,
+      title: "archive",
+      message: "always and failover",
+      priority: 3,
+      tags: [],
+      payload: null,
+      channels: [
+        { channelId: channelIds[0]!, level: 9, alwaysDeliver: true },
+        { channelId: channelIds[1]!, level: 1 },
+        { channelId: channelIds[2]!, level: 2 },
+      ],
+    });
+
+    const deliveries = await prisma.delivery.findMany({
+      where: { messageId },
+      orderBy: { channelId: "asc" },
+    });
+    const archive = deliveries.find((delivery) => delivery.alwaysDeliver)!;
+    const primary = deliveries.find((delivery) => delivery.level === 1)!;
+    const fallback = deliveries.find((delivery) => delivery.level === 2)!;
+
+    expect(archive.status).toBe("PENDING");
+    expect(primary.status).toBe("PENDING");
+    expect(fallback.status).toBe("WAITING");
+
+    const boss = await getQueue();
+    const jobs = await boss.findJobs<DeliveryJobPayload>(DELIVERY_QUEUE, {
+      queued: true,
+    });
+    expect(new Set(jobs.map((job) => job.data.deliveryId))).toEqual(
+      new Set([archive.id, primary.id]),
+    );
+  });
 });

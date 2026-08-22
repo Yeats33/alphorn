@@ -20,6 +20,7 @@ async function addDelivery(
   fixture: Awaited<ReturnType<typeof createDeliveryFixture>>,
   level: number,
   status: "PENDING" | "WAITING",
+  alwaysDeliver = false,
 ) {
   const channel = await prisma.channel.create({
     data: {
@@ -36,6 +37,7 @@ async function addDelivery(
       messageId: fixture.messageId,
       channelId: channel.id,
       level,
+      alwaysDeliver,
       status,
     },
   });
@@ -145,6 +147,22 @@ describe("handleDelivery — worker integration", () => {
     expect((await getDelivery(fixture.deliveryId)).status).toBe("DELIVERED");
     expect((await getDelivery(standby.id)).status).toBe("SKIPPED");
     expect(testChannelCalls()).toHaveLength(1);
+  });
+
+  it("keeps always delivery results independent from failover", async () => {
+    const fixture = await createDeliveryFixture();
+    const archive = await addDelivery(fixture, 9, "PENDING", true);
+    const fallback = await addDelivery(fixture, 2, "WAITING");
+
+    await handleDelivery({ deliveryId: archive.id });
+    expect((await getDelivery(archive.id)).status).toBe("DELIVERED");
+    expect((await getDelivery(fallback.id)).status).toBe("WAITING");
+
+    setTestChannelBehavior({ kind: "permanent", message: "primary down" });
+    await handleDelivery({ deliveryId: fixture.deliveryId });
+
+    expect((await getDelivery(fixture.deliveryId)).status).toBe("FAILED");
+    expect((await getDelivery(fallback.id)).status).toBe("PENDING");
   });
 
   it("promotes the next level exactly once after every active delivery fails", async () => {

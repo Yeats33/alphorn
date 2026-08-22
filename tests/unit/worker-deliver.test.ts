@@ -51,6 +51,7 @@ function makeDelivery(overrides: Record<string, unknown> = {}) {
     messageId: "msg_1",
     attempts: 0,
     level: 1,
+    alwaysDeliver: false,
     channel: {
       id: "ch_1",
       type: "slack",
@@ -165,6 +166,53 @@ describe("handleDelivery", () => {
         deliveredAt: expect.any(Date),
       },
     });
+    expect(mocks.updateManyDelivery).toHaveBeenLastCalledWith({
+      where: {
+        messageId: "msg_1",
+        alwaysDeliver: false,
+        status: "WAITING",
+      },
+      data: { status: "SKIPPED" },
+    });
+  });
+
+  it("does not alter the failover chain when an always delivery succeeds", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    mocks.findDelivery.mockResolvedValue(
+      makeDelivery({ alwaysDeliver: true }),
+    );
+    mocks.getChannel.mockReturnValue({
+      configSchema: { parse: (c: unknown) => c },
+      send,
+    });
+    mocks.updateDelivery.mockResolvedValue({});
+
+    const { handleDelivery } = await import("@/worker/deliver");
+    await handleDelivery({ deliveryId: "del_1" });
+
+    expect(mocks.updateManyDelivery).toHaveBeenCalledTimes(1);
+    expect(mocks.advanceFailover).not.toHaveBeenCalled();
+  });
+
+  it("does not advance failover when an always delivery fails terminally", async () => {
+    const { PermanentChannelError } = await import("@/channels/errors");
+    const send = vi.fn().mockRejectedValue(
+      new PermanentChannelError("archive unavailable"),
+    );
+    mocks.findDelivery.mockResolvedValue(
+      makeDelivery({ alwaysDeliver: true }),
+    );
+    mocks.getChannel.mockReturnValue({
+      configSchema: { parse: (c: unknown) => c },
+      send,
+    });
+    mocks.updateDelivery.mockResolvedValue({ attempts: 1 });
+
+    const { handleDelivery } = await import("@/worker/deliver");
+    await expect(handleDelivery({ deliveryId: "del_1" })).resolves.toBeUndefined();
+
+    expect(mocks.advanceFailover).not.toHaveBeenCalled();
+    expect(mocks.notifyFailure).toHaveBeenCalledWith("del_1");
   });
 
   it("omits undefined notification fields when priority, tags, and payload are empty", async () => {

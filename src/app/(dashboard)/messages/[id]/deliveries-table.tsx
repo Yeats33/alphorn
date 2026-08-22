@@ -22,6 +22,7 @@ interface Delivery {
   id: string;
   channelId: string;
   level: number;
+  alwaysDeliver: boolean;
   status: string;
   attempts: number;
   lastError: string | null;
@@ -105,7 +106,7 @@ export function DeliveriesTable({
         <TableRow>
           <TableHead>Channel</TableHead>
           <TableHead>Type</TableHead>
-          <TableHead>Level</TableHead>
+          <TableHead>Mode / Level</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Attempts</TableHead>
           <TableHead>Error</TableHead>
@@ -126,7 +127,7 @@ export function DeliveriesTable({
             <TableCell className="text-muted-foreground">
               {d.channel.type}
             </TableCell>
-            <TableCell>{d.level}</TableCell>
+            <TableCell>{d.alwaysDeliver ? "Always" : d.level}</TableCell>
             <TableCell>
               <StatusBadge status={d.status} />
             </TableCell>
