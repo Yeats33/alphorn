@@ -213,6 +213,8 @@ export async function updateWebhook(
   ]);
 
   revalidatePath("/webhooks");
+  revalidatePath(`/webhooks/${id}`);
+  revalidatePath(`/webhooks/${id}/edit`);
 }
 
 export async function deleteWebhook(id: string) {
@@ -230,6 +232,7 @@ export async function deleteWebhook(id: string) {
     data: { deletedAt: new Date(), enabled: false },
   });
   revalidatePath("/webhooks");
+  revalidatePath(`/webhooks/${id}`);
 }
 
 export async function regenerateApiKey(id: string) {
@@ -299,6 +302,8 @@ export async function updateWebhookChannels(
   ]);
 
   revalidatePath("/webhooks");
+  revalidatePath(`/webhooks/${webhookId}`);
+  revalidatePath(`/webhooks/${webhookId}/edit`);
 }
 
 export async function toggleWebhookChannel(
@@ -319,6 +324,7 @@ export async function toggleWebhookChannel(
   });
 
   revalidatePath("/webhooks");
+  revalidatePath(`/webhooks/${webhookId}`);
 }
 
 export async function regeneratePublicId(id: string) {

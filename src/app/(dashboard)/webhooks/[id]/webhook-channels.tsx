@@ -106,6 +106,28 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           selectedChannels.map((s) => [s.channelId, s.level])
         ),
       });
+      const currentById = new Map(
+        channels.map((channel) => [channel.channelId, channel]),
+      );
+      const optionById = new Map(
+        allChannels.map((channel) => [channel.id, channel]),
+      );
+      setChannels(
+        selectedChannels.map((selection) => {
+          const current = currentById.get(selection.channelId);
+          const option = optionById.get(selection.channelId);
+          return {
+            channelId: selection.channelId,
+            filter: selection.filter,
+            level: selection.level,
+            enabled: current?.enabled ?? true,
+            channel: {
+              name: current?.channel.name ?? option?.name ?? selection.channelId,
+              type: current?.channel.type ?? option?.type ?? "unknown",
+            },
+          };
+        }),
+      );
       toast.success("Channels updated");
       setEditing(false);
     } catch (err) {
