@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getChannelsForOrg } from "./actions";
+import { getChannelGroupsForOrg } from "./groups/actions";
 import { getAllChannelMeta } from "@/channels/meta";
 import { getMemberRole, requireSession } from "@/lib/auth/server";
 import { getOrgLimits } from "@/lib/billing/subscription";
@@ -19,13 +20,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDate } from "@/lib/format-date";
-import { SquarePen } from "lucide-react";
+import { Layers3, SquarePen } from "lucide-react";
 
 export default async function ChannelsPage() {
   const session = await requireSession();
   const orgId = session.session.activeOrganizationId;
-  const [channels, role, limits] = await Promise.all([
+  const [channels, groups, role, limits] = await Promise.all([
     getChannelsForOrg(),
+    getChannelGroupsForOrg(),
     getMemberRole(),
     orgId ? getOrgLimits(orgId) : Promise.resolve(null),
   ]);
@@ -44,8 +46,15 @@ export default async function ChannelsPage() {
             Configure your notification output channels.
           </p>
         </div>
-        {isAdminOrOwner &&
-          (limitReached ? (
+        {isAdminOrOwner && (
+          <div className="flex gap-2">
+            <Link href="/channels/groups/new">
+              <Button variant="outline">
+                <Layers3 data-icon="inline-start" />
+                Add strategy group
+              </Button>
+            </Link>
+            {limitReached ? (
             <Tooltip>
               <TooltipTrigger render={<span tabIndex={0} />}>
                 <Button disabled>Add channel</Button>
@@ -59,7 +68,9 @@ export default async function ChannelsPage() {
             <Link href="/channels/new">
               <Button>Add channel</Button>
             </Link>
-          ))}
+            )}
+          </div>
+        )}
       </div>
 
       {channels.length === 0 ? (
@@ -127,6 +138,79 @@ export default async function ChannelsPage() {
           </Table>
         </div>
       )}
+
+      <div className="mt-10">
+        <div>
+          <h2 className="text-lg font-semibold">Strategy groups</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Reuse channel filters, failover levels, and Always behavior across webhooks.
+          </p>
+        </div>
+        {groups.length === 0 ? (
+          <div className="mt-4 rounded-md border border-dashed p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No strategy groups configured.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Members</TableHead>
+                  <TableHead>Used by</TableHead>
+                  <TableHead>Status</TableHead>
+                  {isAdminOrOwner && <TableHead className="w-[50px]" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/channels/groups/${group.id}/edit`}
+                        className="hover:underline"
+                      >
+                        {group.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {group.members.map((member) => (
+                          <Badge key={member.channelId} variant="secondary">
+                            {member.channel.name} · {member.alwaysDeliver ? "Always" : `L${member.level}`}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>{group._count.webhooks}</TableCell>
+                    <TableCell>
+                      {group.enabled ? (
+                        <Badge className="border-success/20 bg-success-muted text-success hover:bg-success-muted">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">Disabled</Badge>
+                      )}
+                    </TableCell>
+                    {isAdminOrOwner && (
+                      <TableCell>
+                        <Link href={`/channels/groups/${group.id}/edit`}>
+                          <Button variant="ghost" size="icon-sm" className="text-muted-foreground">
+                            <SquarePen className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

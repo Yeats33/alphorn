@@ -4,6 +4,7 @@ This fork tracks upstream Alphorn and adds focused improvements for a personal, 
 
 - ✅ **Nekoko SMS channel — available now.** Native [eSIM.GG](https://esim.gg/) / Nekoko Telecom SMS delivery with API key, sender number, recipient number, safely encoded dynamic message bodies, delivery retries, and a dedicated channel icon based on the official eSIM.GG brand asset. The test action sends a real SMS.
 - ✅ **Level-based output-channel failover — available now.** Assign each output channel a custom level from 1–99. Channels in the same level send in parallel; the next configured level starts only when every applicable channel in the current level permanently fails. Every new message starts at the lowest applicable level, providing automatic failback after recovery.
+- ✅ **Reusable strategy groups and independent archives — available now.** Define channel filters, levels, and Always-deliver members once under Channels, then attach the strategy group to any webhook. Group edits propagate immediately without copying rules into every webhook.
 
 Existing configurations remain fully compatible: all pre-existing channels default to level 1, which preserves the original fan-out behavior. Follow the [`selfhost`](https://github.com/Yeats33/alphorn/tree/selfhost) branch for these custom changes.
 

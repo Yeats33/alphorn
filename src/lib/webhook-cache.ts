@@ -1,6 +1,7 @@
 import { Client } from "pg";
 import { prisma } from "./db";
 import { logger } from "./logger";
+import { expandChannelRoutes } from "./routing";
 
 // Shape returned to the webhook route. This is a subset of the full Prisma
 // object with only the fields the receiver hot path needs, plus the related
@@ -174,6 +175,19 @@ async function fetchWebhook(publicId: string): Promise<CachedWebhook | null> {
           channel: { select: { id: true, enabled: true } },
         },
       },
+      channelGroups: {
+        include: {
+          group: {
+            include: {
+              members: {
+                include: {
+                  channel: { select: { id: true, enabled: true } },
+                },
+              },
+            },
+          },
+        },
+      },
       organization: {
         include: {
           subscription: {
@@ -209,14 +223,33 @@ async function fetchWebhook(publicId: string): Promise<CachedWebhook | null> {
     messageTemplate: row.messageTemplate,
     tagsTemplate: row.tagsTemplate,
     priorityTemplate: row.priorityTemplate,
-    channels: row.channels.map((wc) => ({
-      channelId: wc.channelId,
-      enabled: wc.enabled,
-      filter: wc.filter,
-      level: wc.level,
-      alwaysDeliver: wc.alwaysDeliver,
-      channel: { id: wc.channel.id, enabled: wc.channel.enabled },
-    })),
+    channels: expandChannelRoutes(
+      row.channels.map((wc) => ({
+        channelId: wc.channelId,
+        enabled: wc.enabled,
+        filter: wc.filter,
+        level: wc.level,
+        alwaysDeliver: wc.alwaysDeliver,
+        channel: { id: wc.channel.id, enabled: wc.channel.enabled },
+      })),
+      row.channelGroups.map((link) => ({
+        enabled: link.enabled,
+        group: {
+          enabled: link.group.enabled,
+          members: link.group.members.map((member) => ({
+            channelId: member.channelId,
+            enabled: member.enabled,
+            filter: member.filter,
+            level: member.level,
+            alwaysDeliver: member.alwaysDeliver,
+            channel: {
+              id: member.channel.id,
+              enabled: member.channel.enabled,
+            },
+          })),
+        },
+      })),
+    ),
     subscription,
   };
 }

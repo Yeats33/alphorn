@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { updateWebhook, deleteWebhook } from "../../actions";
 import { type FilterDefinition, type ChannelSelection, validateFilter } from "@/lib/filter/schema";
 import { ChannelSelector } from "@/components/channel-selector";
+import {
+  StrategyGroupSelector,
+  type StrategyGroupOption,
+} from "@/components/strategy-group-selector";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +32,7 @@ interface WebhookData {
     level: number;
     alwaysDeliver: boolean;
   }[];
+  channelGroups: { groupId: string }[];
   titleTemplate: string | null;
   messageTemplate: string | null;
   tagsTemplate: string | null;
@@ -37,10 +42,12 @@ interface WebhookData {
 export default function EditWebhookForm({
   webhook,
   channels,
+  strategyGroups,
   availableTags,
 }: {
   webhook: WebhookData;
   channels: ChannelOption[];
+  strategyGroups: StrategyGroupOption[];
   availableTags: string[];
 }) {
   const router = useRouter();
@@ -56,6 +63,9 @@ export default function EditWebhookForm({
       level: wc.level,
       alwaysDeliver: wc.alwaysDeliver,
     }))
+  );
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(
+    webhook.channelGroups.map((link) => link.groupId),
   );
   const [titleTemplate, setTitleTemplate] = useState(webhook.titleTemplate ?? "");
   const [messageTemplate, setMessageTemplate] = useState(webhook.messageTemplate ?? "");
@@ -91,6 +101,7 @@ export default function EditWebhookForm({
         enabled,
         requireAuth,
         channelIds: selectedChannels.map((s) => s.channelId),
+        channelGroupIds: selectedGroupIds,
         channelFilters: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.filter])
         ),
@@ -178,6 +189,15 @@ export default function EditWebhookForm({
             disabled={saving}
           />
           <Label>{requireAuth ? "API key required" : "No API key (URL is the secret)"}</Label>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Strategy groups</Label>
+          <StrategyGroupSelector
+            groups={strategyGroups}
+            selectedIds={selectedGroupIds}
+            onChange={setSelectedGroupIds}
+          />
         </div>
 
         <div className="space-y-2">

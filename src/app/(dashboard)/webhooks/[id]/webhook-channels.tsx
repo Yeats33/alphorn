@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { updateWebhookChannels, toggleWebhookChannel } from "../actions";
+import {
+  updateWebhookChannels,
+  toggleWebhookChannel,
+  toggleWebhookChannelGroup,
+} from "../actions";
 import { getChannelsForOrg } from "../../channels/actions";
+import { getChannelGroupsForOrg } from "../../channels/groups/actions";
 import { getAllTagsForOrg } from "../../messages/actions";
 import { type FilterDefinition, type ChannelSelection, validateFilter } from "@/lib/filter/schema";
 import { ChannelSelector } from "@/components/channel-selector";
+import {
+  StrategyGroupSelector,
+  type StrategyGroupOption,
+} from "@/components/strategy-group-selector";
 import { ChannelIcon } from "@/components/channel-icons";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -16,7 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Filter, Pencil } from "lucide-react";
+import { Filter, Layers3, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { showError } from "@/lib/toast-error";
 import type { ChannelOption } from "@/channels/types";
@@ -33,18 +42,34 @@ interface WebhookChannel {
 interface WebhookChannelsProps {
   webhookId: string;
   channels: WebhookChannel[];
+  strategyGroups: WebhookStrategyGroup[];
   isAdminOrOwner: boolean;
 }
 
-export function WebhookChannels({ webhookId, channels: initialChannels, isAdminOrOwner }: WebhookChannelsProps) {
+interface WebhookStrategyGroup {
+  groupId: string;
+  enabled: boolean;
+  group: { id: string; name: string; description: string | null };
+}
+
+export function WebhookChannels({
+  webhookId,
+  channels: initialChannels,
+  strategyGroups: initialStrategyGroups,
+  isAdminOrOwner,
+}: WebhookChannelsProps) {
   const [channels, setChannels] = useState(initialChannels);
+  const [strategyGroups, setStrategyGroups] = useState(initialStrategyGroups);
   const [editing, setEditing] = useState(false);
   const [allChannels, setAllChannels] = useState<ChannelOption[]>([]);
+  const [allGroups, setAllGroups] = useState<StrategyGroupOption[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [selectedChannels, setSelectedChannels] = useState<ChannelSelection[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingOptions, setLoadingOptions] = useState(false);
   const [togglingChannels, setTogglingChannels] = useState<Set<string>>(new Set());
+  const [togglingGroups, setTogglingGroups] = useState<Set<string>>(new Set());
 
   function startEditing() {
     setLoadingOptions(true);
@@ -57,8 +82,21 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         alwaysDeliver: wc.alwaysDeliver,
       }))
     );
-    Promise.all([getChannelsForOrg(), getAllTagsForOrg()]).then(([chs, tags]) => {
+    setSelectedGroupIds(strategyGroups.map((link) => link.groupId));
+    Promise.all([
+      getChannelsForOrg(),
+      getChannelGroupsForOrg(),
+      getAllTagsForOrg(),
+    ]).then(([chs, groups, tags]) => {
       setAllChannels(chs.map((c) => ({ id: c.id, name: c.name, type: c.type })));
+      setAllGroups(
+        groups.map((group) => ({
+          id: group.id,
+          name: group.name,
+          description: group.description,
+          memberCount: group.members.length,
+        })),
+      );
       setAvailableTags(tags);
       setLoadingOptions(false);
     });
@@ -88,6 +126,26 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
     }
   }
 
+  async function handleToggleGroup(groupId: string, enabled: boolean) {
+    setTogglingGroups((previous) => new Set(previous).add(groupId));
+    try {
+      await toggleWebhookChannelGroup(webhookId, groupId, enabled);
+      setStrategyGroups((previous) =>
+        previous.map((link) =>
+          link.groupId === groupId ? { ...link, enabled } : link,
+        ),
+      );
+    } catch (error) {
+      showError(error, "Failed to toggle strategy group");
+    } finally {
+      setTogglingGroups((previous) => {
+        const next = new Set(previous);
+        next.delete(groupId);
+        return next;
+      });
+    }
+  }
+
   async function handleSave() {
     for (const sel of selectedChannels) {
       const err = validateFilter(sel.filter);
@@ -101,6 +159,7 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
     try {
       await updateWebhookChannels(webhookId, {
         channelIds: selectedChannels.map((s) => s.channelId),
+        channelGroupIds: selectedGroupIds,
         channelFilters: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.filter])
         ),
@@ -130,6 +189,26 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
             channel: {
               name: current?.channel.name ?? option?.name ?? selection.channelId,
               type: current?.channel.type ?? option?.type ?? "unknown",
+            },
+          };
+        }),
+      );
+      const currentGroupsById = new Map(
+        strategyGroups.map((link) => [link.groupId, link]),
+      );
+      const optionsById = new Map(allGroups.map((group) => [group.id, group]));
+      setStrategyGroups(
+        selectedGroupIds.map((groupId) => {
+          const current = currentGroupsById.get(groupId);
+          const option = optionsById.get(groupId);
+          return {
+            groupId,
+            enabled: current?.enabled ?? true,
+            group: {
+              id: groupId,
+              name: current?.group.name ?? option?.name ?? groupId,
+              description:
+                current?.group.description ?? option?.description ?? null,
             },
           };
         }),
@@ -182,12 +261,25 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           {loadingOptions ? (
             <p className="text-sm text-muted-foreground">Loading channels...</p>
           ) : (
-            <ChannelSelector
-              channels={allChannels}
-              selected={selectedChannels}
-              onChange={setSelectedChannels}
-              availableTags={availableTags}
-            />
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Strategy groups</p>
+                <StrategyGroupSelector
+                  groups={allGroups}
+                  selectedIds={selectedGroupIds}
+                  onChange={setSelectedGroupIds}
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Direct channels</p>
+                <ChannelSelector
+                  channels={allChannels}
+                  selected={selectedChannels}
+                  onChange={setSelectedChannels}
+                  availableTags={availableTags}
+                />
+              </div>
+            </div>
           )}
           <div className="flex gap-2">
             <Button onClick={handleSave} disabled={saving || loadingOptions}>
@@ -209,8 +301,8 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           <div>
             <CardTitle>Output Channels</CardTitle>
             <CardDescription>
-              A later level starts only when every applicable channel in the
-              current level ultimately fails.
+              Strategy groups expand reusable policies. Direct channels follow
+              their configured failover levels; Always routes run independently.
             </CardDescription>
           </div>
           {isAdminOrOwner && (
@@ -222,7 +314,7 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         </div>
       </CardHeader>
       <CardContent>
-        {channels.length === 0 ? (
+        {channels.length === 0 && strategyGroups.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No channels linked.{" "}
             {isAdminOrOwner && (
@@ -236,6 +328,40 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           </p>
         ) : (
           <div className="space-y-4">
+            {strategyGroups.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Strategy groups
+                </p>
+                {strategyGroups.map((link) => (
+                  <div
+                    key={link.groupId}
+                    className="flex items-center gap-3 rounded-md border px-3 py-2"
+                  >
+                    <Layers3 className="h-5 w-5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium leading-none">
+                        {link.group.name}
+                      </p>
+                      {link.group.description && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {link.group.description}
+                        </p>
+                      )}
+                    </div>
+                    {isAdminOrOwner && (
+                      <Switch
+                        checked={link.enabled}
+                        disabled={togglingGroups.has(link.groupId)}
+                        onCheckedChange={(checked) =>
+                          handleToggleGroup(link.groupId, checked)
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             {channelGroups.map((group) => (
                 <div key={group.key} className="space-y-2">
                   <div className="flex items-center gap-2">

@@ -62,6 +62,7 @@ export default async function WebhookDetailPage({
         <WebhookChannels
           webhookId={webhook.id}
           channels={webhook.channels}
+          strategyGroups={webhook.channelGroups}
           isAdminOrOwner={isAdminOrOwner}
         />
 

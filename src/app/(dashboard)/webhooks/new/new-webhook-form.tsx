@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createWebhook } from "../actions";
 import { ChannelSelector } from "@/components/channel-selector";
+import {
+  StrategyGroupSelector,
+  type StrategyGroupOption,
+} from "@/components/strategy-group-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,15 +21,18 @@ import type { ChannelOption } from "@/channels/types";
 
 export default function NewWebhookForm({
   channels,
+  strategyGroups,
   availableTags,
 }: {
   channels: ChannelOption[];
+  strategyGroups: StrategyGroupOption[];
   availableTags: string[];
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedChannels, setSelectedChannels] = useState<ChannelSelection[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [requireAuth, setRequireAuth] = useState(true);
   const [titleTemplate, setTitleTemplate] = useState("");
   const [messageTemplate, setMessageTemplate] = useState("");
@@ -52,6 +59,7 @@ export default function NewWebhookForm({
         description: description || undefined,
         requireAuth,
         channelIds: selectedChannels.map((s) => s.channelId),
+        channelGroupIds: selectedGroupIds,
         channelFilters: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.filter])
         ),
@@ -114,6 +122,18 @@ export default function NewWebhookForm({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What this webhook is used for..."
             disabled={saving}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Strategy groups</Label>
+          <p className="text-xs text-muted-foreground">
+            Attach reusable routing policies without copying member rules.
+          </p>
+          <StrategyGroupSelector
+            groups={strategyGroups}
+            selectedIds={selectedGroupIds}
+            onChange={setSelectedGroupIds}
           />
         </div>
 

@@ -70,6 +70,33 @@ async function assertChannelsBelongToOrg(channelIds: string[], orgId: string) {
   }
 }
 
+async function assertGroupsBelongToOrg(groupIds: string[], orgId: string) {
+  if (groupIds.length === 0) return;
+  const unique = Array.from(new Set(groupIds));
+  const count = await prisma.channelGroup.count({
+    where: { id: { in: unique }, organizationId: orgId },
+  });
+  if (count !== unique.length) {
+    throw new Error("One or more strategy groups do not belong to this project");
+  }
+}
+
+async function assertNoDirectGroupOverlap(
+  channelIds: string[],
+  groupIds: string[],
+) {
+  if (channelIds.length === 0 || groupIds.length === 0) return;
+  const overlap = await prisma.channelGroupMember.findFirst({
+    where: { groupId: { in: groupIds }, channelId: { in: channelIds } },
+    select: { channelId: true },
+  });
+  if (overlap) {
+    throw new Error(
+      "A channel cannot be attached directly and through a selected strategy group",
+    );
+  }
+}
+
 export async function getWebhooksForOrg() {
   const session = await requireSession();
   const orgId = session.session.activeOrganizationId;
@@ -80,6 +107,9 @@ export async function getWebhooksForOrg() {
     include: {
       channels: {
         include: { channel: true },
+      },
+      channelGroups: {
+        include: { group: true },
       },
       _count: { select: { messages: true } },
     },
@@ -96,6 +126,9 @@ export async function getWebhookById(id: string) {
       channels: {
         include: { channel: true },
       },
+      channelGroups: {
+        include: { group: true },
+      },
     },
   });
 }
@@ -105,6 +138,7 @@ export async function createWebhook(data: {
   description?: string;
   requireAuth?: boolean;
   channelIds: string[];
+  channelGroupIds?: string[];
   channelFilters?: Record<string, FilterDefinition | null>;
   channelLevels?: Record<string, number>;
   channelAlwaysDeliveries?: Record<string, boolean>;
@@ -130,6 +164,9 @@ export async function createWebhook(data: {
   validateFilters(data.channelFilters);
   validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
+  const channelGroupIds = data.channelGroupIds ?? [];
+  await assertGroupsBelongToOrg(channelGroupIds, orgId);
+  await assertNoDirectGroupOverlap(data.channelIds, channelGroupIds);
 
   const templates = webhookTemplatesSchema.parse({
     titleTemplate: data.titleTemplate ?? null,
@@ -162,6 +199,9 @@ export async function createWebhook(data: {
           ),
         })),
       },
+      channelGroups: {
+        create: channelGroupIds.map((groupId) => ({ groupId })),
+      },
     },
   });
 
@@ -177,6 +217,7 @@ export async function updateWebhook(
     enabled: boolean;
     requireAuth: boolean;
     channelIds: string[];
+    channelGroupIds?: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
     channelLevels?: Record<string, number>;
     channelAlwaysDeliveries?: Record<string, boolean>;
@@ -196,6 +237,9 @@ export async function updateWebhook(
   validateFilters(data.channelFilters);
   validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
+  const channelGroupIds = data.channelGroupIds ?? [];
+  await assertGroupsBelongToOrg(channelGroupIds, orgId);
+  await assertNoDirectGroupOverlap(data.channelIds, channelGroupIds);
 
   const templates = webhookTemplatesSchema.parse({
     titleTemplate: data.titleTemplate ?? null,
@@ -206,6 +250,7 @@ export async function updateWebhook(
 
   await prisma.$transaction([
     prisma.webhookChannel.deleteMany({ where: { webhookId: id } }),
+    prisma.webhookChannelGroup.deleteMany({ where: { webhookId: id } }),
     prisma.webhook.update({
       where: { id },
       data: {
@@ -227,6 +272,9 @@ export async function updateWebhook(
               data.channelAlwaysDeliveries,
             ),
           })),
+        },
+        channelGroups: {
+          create: channelGroupIds.map((groupId) => ({ groupId })),
         },
       },
     }),
@@ -292,6 +340,7 @@ export async function updateWebhookChannels(
   webhookId: string,
   data: {
     channelIds: string[];
+    channelGroupIds?: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
     channelLevels?: Record<string, number>;
     channelAlwaysDeliveries?: Record<string, boolean>;
@@ -307,9 +356,13 @@ export async function updateWebhookChannels(
   validateFilters(data.channelFilters);
   validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
+  const channelGroupIds = data.channelGroupIds ?? [];
+  await assertGroupsBelongToOrg(channelGroupIds, orgId);
+  await assertNoDirectGroupOverlap(data.channelIds, channelGroupIds);
 
   await prisma.$transaction([
     prisma.webhookChannel.deleteMany({ where: { webhookId } }),
+    prisma.webhookChannelGroup.deleteMany({ where: { webhookId } }),
     ...data.channelIds.map((channelId) =>
       prisma.webhookChannel.create({
         data: {
@@ -323,6 +376,11 @@ export async function updateWebhookChannels(
           ),
         },
       })
+    ),
+    ...channelGroupIds.map((groupId) =>
+      prisma.webhookChannelGroup.create({
+        data: { webhookId, groupId },
+      }),
     ),
   ]);
 
@@ -345,6 +403,26 @@ export async function toggleWebhookChannel(
 
   await prisma.webhookChannel.update({
     where: { webhookId_channelId: { webhookId, channelId } },
+    data: { enabled },
+  });
+
+  revalidatePath("/webhooks");
+  revalidatePath(`/webhooks/${webhookId}`);
+}
+
+export async function toggleWebhookChannelGroup(
+  webhookId: string,
+  groupId: string,
+  enabled: boolean,
+) {
+  const { orgId } = await requireAdminOrOwner();
+  const existing = await prisma.webhook.findFirst({
+    where: { id: webhookId, organizationId: orgId, deletedAt: null },
+  });
+  if (!existing) throw new Error("Webhook not found");
+
+  await prisma.webhookChannelGroup.update({
+    where: { webhookId_groupId: { webhookId, groupId } },
     data: { enabled },
   });
 

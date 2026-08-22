@@ -57,6 +57,7 @@ function buildRow(overrides: Record<string, unknown> = {}) {
         channel: { id: "ch_1", enabled: true },
       },
     ],
+    channelGroups: [],
     organization: {
       subscription: {
         plan: "free",

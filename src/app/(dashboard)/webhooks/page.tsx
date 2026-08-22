@@ -96,10 +96,20 @@ export default async function WebhooksPage() {
                     </Link>
                   </TableCell>
                   <TableCell>
-                    {webhook.channels.length === 0 ? (
+                    {webhook.channels.length === 0 && webhook.channelGroups.length === 0 ? (
                       <span className="text-muted-foreground">None</span>
                     ) : (
                       <div className="flex gap-1 flex-wrap">
+                        {webhook.channelGroups.map((link) => (
+                          <Link
+                            key={link.groupId}
+                            href={`/channels/groups/${link.groupId}/edit`}
+                          >
+                            <Badge variant="outline" className="hover:bg-accent">
+                              Group: {link.group.name}
+                            </Badge>
+                          </Link>
+                        ))}
                         {webhook.channels.map((wc) => (
                           <Link key={wc.channelId} href={`/channels/${wc.channelId}/edit`}>
                             <Badge variant="secondary" className="hover:bg-accent">

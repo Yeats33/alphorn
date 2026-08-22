@@ -9,6 +9,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { evaluateFilter } from "@/lib/filter";
 import type { FilterDefinition } from "@/lib/filter/schema";
 import { persistMessageAndEnqueueDeliveries } from "@/lib/delivery";
+import { expandChannelRoutes } from "@/lib/routing";
 
 export interface MessageFilters {
   q?: string;
@@ -200,7 +201,18 @@ export async function sendTestMessage(
 
   const webhook = await prisma.webhook.findFirst({
     where: { id: webhookId, organizationId: orgId, enabled: true, deletedAt: null },
-    include: { channels: { include: { channel: true } } },
+    include: {
+      channels: { include: { channel: true } },
+      channelGroups: {
+        include: {
+          group: {
+            include: {
+              members: { include: { channel: true } },
+            },
+          },
+        },
+      },
+    },
   });
   if (!webhook) throw new Error("Webhook not found");
 
@@ -213,7 +225,11 @@ export async function sendTestMessage(
     tags: normalizedTags,
     payload,
   };
-  const enabledChannels = webhook.channels.filter(
+  const routes = expandChannelRoutes(
+    webhook.channels,
+    webhook.channelGroups,
+  );
+  const enabledChannels = routes.filter(
     (wc) =>
       wc.enabled &&
       wc.channel.enabled &&

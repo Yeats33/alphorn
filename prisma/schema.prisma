@@ -12,21 +12,21 @@ datasource db {
 // ============================================================
 
 model User {
-  id            String    @id
-  name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  id               String   @id
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
   image            String?
-  twoFactorEnabled Boolean   @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  twoFactorEnabled Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  sessions    Session[]
-  accounts    Account[]
-  members          Member[]
-  invitations      Invitation[]
-  twoFactors       TwoFactor[]
-  usedInviteLinks  InviteLink[]
+  sessions           Session[]
+  accounts           Account[]
+  members            Member[]
+  invitations        Invitation[]
+  twoFactors         TwoFactor[]
+  usedInviteLinks    InviteLink[]
   createdInviteLinks InviteLink[] @relation("inviteLinkCreator")
 }
 
@@ -104,39 +104,40 @@ model Organization {
   updatedAt DateTime @updatedAt
   metadata  String?
 
-  members     Member[]
-  invitations Invitation[]
-  inviteLinks InviteLink[]
-  webhooks    Webhook[]
-  channels    Channel[]
-  settings    OrganizationSettings?
-  subscription Subscription?
+  members       Member[]
+  invitations   Invitation[]
+  inviteLinks   InviteLink[]
+  webhooks      Webhook[]
+  channels      Channel[]
+  channelGroups ChannelGroup[]
+  settings      OrganizationSettings?
+  subscription  Subscription?
 }
 
 model Member {
-  id             String   @id
+  id             String       @id
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           String
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId])
   @@index([userId])
 }
 
 model Invitation {
-  id               String       @id
-  organizationId   String
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  email            String
-  role             String?
-  status           String
-  expiresAt        DateTime
-  createdAt        DateTime     @default(now())
-  inviterId        String
-  inviter          User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  inviter        User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([email])
@@ -144,18 +145,18 @@ model Invitation {
 }
 
 model InviteLink {
-  id             String       @id @default(cuid())
-  token          String       @unique
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           String       @default("member")
-  expiresAt      DateTime
-  createdAt      DateTime     @default(now())
-  usedAt         DateTime?
-  usedByUserId   String?
-  usedByUser     User?        @relation(fields: [usedByUserId], references: [id], onDelete: SetNull)
+  id              String       @id @default(cuid())
+  token           String       @unique
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role            String       @default("member")
+  expiresAt       DateTime
+  createdAt       DateTime     @default(now())
+  usedAt          DateTime?
+  usedByUserId    String?
+  usedByUser      User?        @relation(fields: [usedByUserId], references: [id], onDelete: SetNull)
   createdByUserId String
-  createdByUser  User         @relation("inviteLinkCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  createdByUser   User         @relation("inviteLinkCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
 }
 
 // ============================================================
@@ -174,28 +175,29 @@ enum DeliveryStatus {
 }
 
 model Webhook {
-  id             String       @id
-  name           String
-  description    String?
-  apiKey         String       @unique
-  publicId       String       @unique
+  id               String       @id
+  name             String
+  description      String?
+  apiKey           String       @unique
+  publicId         String       @unique
   requireAuth      Boolean      @default(true)
   titleTemplate    String?
   messageTemplate  String?
   tagsTemplate     String?
   priorityTemplate String?
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  enabled        Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled          Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
   // Soft-delete tombstone. When set, the webhook is hidden from list/detail/
   // edit/receiver paths but its Messages and Deliveries remain so history and
   // billing aggregates stay intact.
-  deletedAt      DateTime?
+  deletedAt        DateTime?
 
-  channels WebhookChannel[]
-  messages Message[]
+  channels      WebhookChannel[]
+  channelGroups WebhookChannelGroup[]
+  messages      Message[]
 
   @@index([organizationId])
 }
@@ -212,8 +214,9 @@ model Channel {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  webhooks   WebhookChannel[]
-  deliveries Delivery[]
+  webhooks        WebhookChannel[]
+  groupMembership ChannelGroupMember?
+  deliveries      Delivery[]
 
   @@index([organizationId])
 }
@@ -229,6 +232,47 @@ model WebhookChannel {
   channel       Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@id([webhookId, channelId])
+}
+
+model ChannelGroup {
+  id             String       @id
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  members  ChannelGroupMember[]
+  webhooks WebhookChannelGroup[]
+
+  @@index([organizationId])
+}
+
+model ChannelGroupMember {
+  groupId       String
+  channelId     String       @unique
+  filter        Json?
+  enabled       Boolean      @default(true)
+  level         Int          @default(1)
+  alwaysDeliver Boolean      @default(false)
+  group         ChannelGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  channel       Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, channelId])
+  @@index([groupId])
+}
+
+model WebhookChannelGroup {
+  webhookId String
+  groupId   String
+  enabled   Boolean      @default(true)
+  webhook   Webhook      @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  group     ChannelGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([webhookId, groupId])
+  @@index([groupId])
 }
 
 model Message {
@@ -270,33 +314,33 @@ model Delivery {
 }
 
 model OrganizationSettings {
-  id                           String        @id @default(cuid())
-  organizationId               String        @unique
-  organization                 Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                           String       @id @default(cuid())
+  organizationId               String       @unique
+  organization                 Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   failureNotificationChannelId String?
-  requireTwoFactor             Boolean       @default(false)
+  requireTwoFactor             Boolean      @default(false)
 }
 
 model Subscription {
-  id                    String    @id @default(cuid())
-  organizationId        String    @unique
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Paddle identifiers (null for free plan or manual overrides)
-  paddleCustomerId      String?   @unique
-  paddleSubscriptionId  String?   @unique
+  paddleCustomerId     String? @unique
+  paddleSubscriptionId String? @unique
 
   // Plan: "free" | "pro" | "business"
-  plan                  String    @default("free")
+  plan   String @default("free")
   // Status: "active" | "paused" | "cancelled" | "past_due" | "trialing"
-  status                String    @default("active")
+  status String @default("active")
 
   // Current billing period (null for free plan)
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
 
   // Message packs purchased in current period (reset on renewal)
-  purchasedPacks        Int       @default(0)
+  purchasedPacks Int @default(0)
 
   // Manual overrides — null = use plan default, -1 = unlimited
   overrideMessageLimit  Int?
@@ -305,10 +349,10 @@ model Subscription {
   overrideRetentionDays Int?
 
   // Last paddle subscription `updated_at` we applied — used to drop out-of-order webhooks
-  paddleUpdatedAt       DateTime?
+  paddleUpdatedAt DateTime?
 
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PaddleEvent {
@@ -326,7 +370,7 @@ model PaddleEvent {
 model SubscriptionEvent {
   id             String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   organizationId String
-  type           String   // "created" | "reactivated" | "cancelled" | "paused" | "past_due" | "plan_changed"
+  type           String // "created" | "reactivated" | "cancelled" | "paused" | "past_due" | "plan_changed"
   fromPlan       String?
   toPlan         String?
   fromStatus     String?

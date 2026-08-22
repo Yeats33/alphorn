@@ -16,3 +16,7 @@ export function generateWebhookId(): string {
 export function generateChannelId(): string {
   return `ch_${nanoid(16)}`;
 }
+
+export function generateChannelGroupId(): string {
+  return `cg_${nanoid(16)}`;
+}

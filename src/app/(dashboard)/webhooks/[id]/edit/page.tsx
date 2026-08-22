@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getMemberRole } from "@/lib/auth/server";
 import { getWebhookById } from "../../actions";
 import { getChannelsForOrg } from "../../../channels/actions";
+import { getChannelGroupsForOrg } from "../../../channels/groups/actions";
 import { getAllTagsForOrg } from "../../../messages/actions";
 import EditWebhookForm from "./edit-webhook-form";
 
@@ -11,10 +12,11 @@ export default async function EditWebhookPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [role, webhook, channels, tags] = await Promise.all([
+  const [role, webhook, channels, groups, tags] = await Promise.all([
     getMemberRole(),
     getWebhookById(id),
     getChannelsForOrg(),
+    getChannelGroupsForOrg(),
     getAllTagsForOrg(),
   ]);
   if (!role || !["owner", "admin"].includes(role)) {
@@ -28,6 +30,12 @@ export default async function EditWebhookPage({
     <EditWebhookForm
       webhook={webhook}
       channels={channels.map((c) => ({ id: c.id, name: c.name, type: c.type }))}
+      strategyGroups={groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        memberCount: group.members.length,
+      }))}
       availableTags={tags}
     />
   );
