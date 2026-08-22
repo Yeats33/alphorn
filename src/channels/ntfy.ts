@@ -2,11 +2,12 @@ import { z } from "zod";
 import { registerChannel } from "./registry";
 import { fetchWithTimeout } from "./fetch";
 import { throwIfNotOk } from "./errors";
-import { mapPriorityScale } from "@/lib/filter/schema";
 import { joinUrl } from "./utils";
 import { meta } from "./ntfy.meta";
 
-const NTFY_PRIORITY_SCALE = ["min", "low", "default", "high", "urgent"] as const;
+function normalizeNtfyPriority(priority: number): string {
+  return String(Math.min(5, Math.max(1, Math.round(priority))));
+}
 
 const configSchema = z.object({
   serverUrl: z
@@ -27,7 +28,9 @@ registerChannel({
       headers["X-Title"] = notification.title;
     }
     if (notification.priority != null) {
-      headers["X-Priority"] = mapPriorityScale(notification.priority, NTFY_PRIORITY_SCALE, "default");
+      // Alphorn and ntfy share the same 1-5 priority scale. Preserve the
+      // numeric value instead of translating it to a second representation.
+      headers["X-Priority"] = normalizeNtfyPriority(notification.priority);
     }
     if (notification.tags?.length) {
       headers["X-Tags"] = notification.tags.join(",");
