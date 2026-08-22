@@ -20,6 +20,7 @@ import { meta as opsgenie } from "./opsgenie.meta";
 import { meta as sendgrid } from "./sendgrid.meta";
 import { meta as mailgun } from "./mailgun.meta";
 import { meta as vonageSms } from "./vonage-sms.meta";
+import { meta as nekokoSms } from "./nekoko-sms.meta";
 
 export type { ChannelMeta };
 
@@ -53,6 +54,7 @@ const channelMeta: ChannelMeta[] = [
   sendgrid,
   mailgun,
   vonageSms,
+  nekokoSms,
 ];
 
 export function getAllChannelMeta(): ChannelMeta[] {

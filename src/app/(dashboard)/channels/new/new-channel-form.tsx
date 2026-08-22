@@ -19,7 +19,7 @@ const CATEGORIES: Record<string, string[]> = {
   "Push Notifications": ["ntfy", "pushover", "gotify"],
   "Incident Management": ["pagerduty", "opsgenie"],
   "Email": ["smtp", "sendgrid", "mailgun"],
-  "SMS": ["twilio-sms", "vonage-sms"],
+  "SMS": ["twilio-sms", "vonage-sms", "nekoko-sms"],
   "Other": ["webhook", "sse"],
 };
 

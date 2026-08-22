@@ -20,5 +20,6 @@ import "./opsgenie";
 import "./sendgrid";
 import "./mailgun";
 import "./vonage-sms";
+import "./nekoko-sms";
 
 export { getChannel, getAllChannels, getChannelTypes } from "./registry";

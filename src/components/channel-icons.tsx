@@ -274,6 +274,20 @@ function Vonage(props: IconProps) {
   );
 }
 
+function NekokoSms(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <path d="M3 4.5h18v13H8l-5 3v-16z" fill="#14B8A6" />
+      <path
+        d="M7 9h10M7 13h7"
+        stroke="white"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 const iconMap: Record<string, React.FC<IconProps>> = {
   telegram: Telegram,
   discord: Discord,
@@ -296,6 +310,7 @@ const iconMap: Record<string, React.FC<IconProps>> = {
   sendgrid: SendGrid,
   mailgun: Mailgun,
   vonage: Vonage,
+  "nekoko-sms": NekokoSms,
 };
 
 interface ChannelIconProps extends IconProps {
