@@ -1,23 +1,45 @@
+# Local quick-start only. For production, use the hardened overlays under
+# deploy/compose/ and follow docs/deployment/docker.md.
 services:
   alphorn:
     build: .
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://alphorn:${POSTGRES_PASSWORD:-alphorn}@db:5432/alphorn
+      DATABASE_URL: postgresql://alphorn:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/alphorn
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL in .env}
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
 
   db:
     image: postgres:18-alpine
     environment:
       POSTGRES_USER: alphorn
       POSTGRES_DB: alphorn
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alphorn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
@@ -26,6 +48,12 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
 
 volumes:
   pgdata:

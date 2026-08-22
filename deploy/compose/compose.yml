@@ -1,0 +1,129 @@
+name: alphorn
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:18-alpine}
+    environment:
+      POSTGRES_USER: alphorn
+      POSTGRES_DB: alphorn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/compose/.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alphorn -d alphorn"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    shm_size: 128mb
+    stop_grace_period: 60s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  smokescreen:
+    build:
+      context: ../smokescreen
+      args:
+        SMOKESCREEN_REF: ${SMOKESCREEN_REF:-f03c477dc9f4fe3252ae96ad9274d53108b2c53c}
+    image: alphorn-smokescreen:${SMOKESCREEN_IMAGE_TAG:-f03c477d}
+    command:
+      - --listen-ip=0.0.0.0
+      - --listen-port=4750
+      - --timeout=15s
+      - --max-concurrent-requests=100
+      - --max-request-rate=50
+      - --max-request-burst=100
+      - --max-concurrent-connect-tunnels=50
+      - --additional-error-message-on-deny=Private and non-routable destinations are blocked
+    networks:
+      - channel-egress
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 4750"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  alphorn:
+    build:
+      context: ../..
+      args:
+        APP_VERSION: ${APP_VERSION:-selfhost}
+    image: ${ALPHORN_IMAGE:-alphorn-local}:${APP_VERSION:-selfhost}
+    init: true
+    environment:
+      DATABASE_URL: postgresql://alphorn:${POSTGRES_PASSWORD}@db:5432/alphorn
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in deploy/compose/.env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL in deploy/compose/.env}
+      MODE: ${MODE:-all}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-20}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      BETTER_AUTH_LOG_LEVEL: ${BETTER_AUTH_LOG_LEVEL:-warn}
+      EGRESS_PROXY_URL: http://smokescreen:4750
+      WEBHOOK_MAX_BODY_BYTES: ${WEBHOOK_MAX_BODY_BYTES:-1048576}
+      WEBHOOK_MAX_HOPS: ${WEBHOOK_MAX_HOPS:-3}
+      SSE_MAX_CONNECTIONS_PER_CHANNEL: ${SSE_MAX_CONNECTIONS_PER_CHANNEL:-20}
+      SSE_MAX_CONNECTIONS_PER_IP: ${SSE_MAX_CONNECTIONS_PER_IP:-20}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.1}
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      smokescreen:
+        condition: service_healthy
+    networks:
+      - backend
+      - channel-egress
+      - ingress
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    stop_grace_period: 60s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+networks:
+  backend:
+    internal: true
+  channel-egress:
+  ingress:
+    internal: true
+
+volumes:
+  postgres-data:

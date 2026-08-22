@@ -1,0 +1,28 @@
+services:
+  cloudflared:
+    image: ${CLOUDFLARED_IMAGE:-cloudflare/cloudflared:latest}
+    pull_policy: always
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token
+      - ${CLOUDFLARED_TOKEN:?set CLOUDFLARED_TOKEN in deploy/compose/.env}
+    depends_on:
+      alphorn:
+        condition: service_healthy
+    networks:
+      - ingress
+      - tunnel-egress
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  tunnel-egress:
