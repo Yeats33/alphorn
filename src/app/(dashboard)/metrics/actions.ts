@@ -106,13 +106,15 @@ export async function getMetrics(days: number = 30): Promise<MetricsData> {
       SELECT
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'DELIVERED' AND "Delivery"."createdAt" >= ${since})::bigint AS delivered,
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'FAILED' AND "Delivery"."createdAt" >= ${since})::bigint AS failed,
-        COUNT(*) FILTER (WHERE "Delivery"."status" IN ('PENDING', 'PROCESSING'))::bigint AS pending
+        COUNT(*) FILTER (
+          WHERE "Delivery"."status" IN ('WAITING', 'PENDING', 'PROCESSING', 'RETRYING')
+        )::bigint AS pending
       FROM "Delivery"
       JOIN "Channel" ON "Delivery"."channelId" = "Channel"."id"
       WHERE "Channel"."organizationId" = ${orgId}
         AND (
           "Delivery"."createdAt" >= ${since}
-          OR "Delivery"."status" IN ('PENDING', 'PROCESSING')
+          OR "Delivery"."status" IN ('WAITING', 'PENDING', 'PROCESSING', 'RETRYING')
         )
     `,
     prisma.$queryRaw<{ date: Date; count: bigint }[]>`
@@ -179,7 +181,7 @@ export async function getMetrics(days: number = 30): Promise<MetricsData> {
         "Channel"."type" as channel_type,
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'DELIVERED')::bigint as delivered,
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'FAILED')::bigint as failed,
-        COUNT(*)::bigint as total
+        COUNT(*) FILTER (WHERE "Delivery"."status" <> 'SKIPPED')::bigint as total
       FROM "Delivery"
       JOIN "Channel" ON "Delivery"."channelId" = "Channel"."id"
       WHERE "Channel"."organizationId" = ${orgId}

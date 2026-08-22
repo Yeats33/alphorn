@@ -55,7 +55,7 @@ describe("persistMessageAndEnqueueDeliveries — integration", () => {
       priority: 5,
       tags: ["a", "b"],
       payload: { hello: "world" },
-      channelIds,
+      channels: channelIds.map((channelId) => ({ channelId, level: 1 })),
     });
 
     const message = await prisma.message.findUniqueOrThrow({
@@ -97,7 +97,7 @@ describe("persistMessageAndEnqueueDeliveries — integration", () => {
       priority: null,
       tags: [],
       payload: null,
-      channelIds,
+      channels: channelIds.map((channelId) => ({ channelId, level: 1 })),
       trace,
     });
 
@@ -120,7 +120,7 @@ describe("persistMessageAndEnqueueDeliveries — integration", () => {
       priority: null,
       tags: [],
       payload: null,
-      channelIds: [],
+      channels: [],
     });
 
     const deliveries = await prisma.delivery.findMany({ where: { messageId } });
@@ -131,5 +131,42 @@ describe("persistMessageAndEnqueueDeliveries — integration", () => {
       queued: true,
     });
     expect(jobs).toHaveLength(0);
+  });
+
+  it("queues only the lowest configured level and leaves later levels waiting", async () => {
+    const { webhookId, channelIds } = await seedWebhookWithChannels(3);
+
+    const { messageId } = await persistMessageAndEnqueueDeliveries({
+      webhookId,
+      title: "fallback",
+      message: "try levels",
+      priority: 5,
+      tags: [],
+      payload: null,
+      channels: [
+        { channelId: channelIds[0]!, level: 2 },
+        { channelId: channelIds[1]!, level: 1 },
+        { channelId: channelIds[2]!, level: 2 },
+      ],
+    });
+
+    const deliveries = await prisma.delivery.findMany({
+      where: { messageId },
+      orderBy: [{ level: "asc" }, { channelId: "asc" }],
+    });
+    expect(deliveries.map((delivery) => delivery.level)).toEqual([1, 2, 2]);
+    expect(deliveries.map((delivery) => delivery.status)).toEqual([
+      "PENDING",
+      "WAITING",
+      "WAITING",
+    ]);
+
+    const boss = await getQueue();
+    const jobs = await boss.findJobs<DeliveryJobPayload>(DELIVERY_QUEUE, {
+      queued: true,
+    });
+    expect(jobs).toHaveLength(1);
+    const active = deliveries.find((delivery) => delivery.level === 1)!;
+    expect(jobs[0]!.data.deliveryId).toBe(active.id);
   });
 });

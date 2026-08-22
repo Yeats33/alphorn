@@ -25,6 +25,7 @@ interface WebhookChannel {
   channelId: string;
   filter: unknown;
   enabled: boolean;
+  level: number;
   channel: { name: string; type: string };
 }
 
@@ -51,6 +52,7 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
       channels.map((wc) => ({
         channelId: wc.channelId,
         filter: (wc.filter as FilterDefinition | null) ?? null,
+        level: wc.level,
       }))
     );
     Promise.all([getChannelsForOrg(), getAllTagsForOrg()]).then(([chs, tags]) => {
@@ -100,6 +102,9 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         channelFilters: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.filter])
         ),
+        channelLevels: Object.fromEntries(
+          selectedChannels.map((s) => [s.channelId, s.level])
+        ),
       });
       toast.success("Channels updated");
       setEditing(false);
@@ -116,7 +121,8 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
         <CardHeader>
           <CardTitle>Output Channels</CardTitle>
           <CardDescription>
-            Select channels and configure filters for this webhook.
+            Select channels, configure filters, and assign failover levels.
+            Channels in the same level send in parallel.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -150,7 +156,8 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
           <div>
             <CardTitle>Output Channels</CardTitle>
             <CardDescription>
-              Notifications from this webhook are sent to these channels.
+              A later level starts only when every applicable channel in the
+              current level ultimately fails.
             </CardDescription>
           </div>
           {isAdminOrOwner && (
@@ -175,29 +182,56 @@ export function WebhookChannels({ webhookId, channels: initialChannels, isAdminO
             )}
           </p>
         ) : (
-          <div className="space-y-2">
-            {channels.map((wc) => (
-              <div
-                key={wc.channelId}
-                className="flex items-center gap-3 rounded-md border px-3 py-2"
-              >
-                <ChannelIcon icon={wc.channel.type} className="h-5 w-5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-none">{wc.channel.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{wc.channel.type}</p>
+          <div className="space-y-4">
+            {Array.from(new Set(channels.map((channel) => channel.level)))
+              .sort((a, b) => a - b)
+              .map((level) => (
+                <div key={level} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Level {level}
+                    </p>
+                    {level === 1 && (
+                      <span className="text-xs text-muted-foreground">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                  {channels
+                    .filter((channel) => channel.level === level)
+                    .map((wc) => (
+                      <div
+                        key={wc.channelId}
+                        className="flex items-center gap-3 rounded-md border px-3 py-2"
+                      >
+                        <ChannelIcon
+                          icon={wc.channel.type}
+                          className="h-5 w-5 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium leading-none">
+                            {wc.channel.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {wc.channel.type}
+                          </p>
+                        </div>
+                        {wc.filter ? (
+                          <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        ) : null}
+                        {isAdminOrOwner && (
+                          <Switch
+                            checked={wc.enabled}
+                            disabled={togglingChannels.has(wc.channelId)}
+                            onCheckedChange={(checked) =>
+                              handleToggle(wc.channelId, checked)
+                            }
+                          />
+                        )}
+                      </div>
+                    ))}
                 </div>
-                {wc.filter ? (
-                  <Filter className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                ) : null}
-                {isAdminOrOwner && (
-                  <Switch
-                    checked={wc.enabled}
-                    disabled={togglingChannels.has(wc.channelId)}
-                    onCheckedChange={(checked) => handleToggle(wc.channelId, checked)}
-                  />
-                )}
-              </div>
-            ))}
+              ))}
           </div>
         )}
       </CardContent>

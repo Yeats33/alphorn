@@ -95,6 +95,7 @@ export default async function MessageDetailPage({
             initialDeliveries={message.deliveries.map((d) => ({
               id: d.id,
               channelId: d.channelId,
+              level: d.level,
               status: d.status,
               attempts: d.attempts,
               lastError: d.lastError,

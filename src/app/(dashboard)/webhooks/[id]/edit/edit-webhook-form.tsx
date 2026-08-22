@@ -22,7 +22,7 @@ interface WebhookData {
   description: string | null;
   enabled: boolean;
   requireAuth: boolean;
-  channels: { channelId: string; filter: unknown }[];
+  channels: { channelId: string; filter: unknown; level: number }[];
   titleTemplate: string | null;
   messageTemplate: string | null;
   tagsTemplate: string | null;
@@ -48,6 +48,7 @@ export default function EditWebhookForm({
     webhook.channels.map((wc) => ({
       channelId: wc.channelId,
       filter: (wc.filter as FilterDefinition | null) ?? null,
+      level: wc.level,
     }))
   );
   const [titleTemplate, setTitleTemplate] = useState(webhook.titleTemplate ?? "");
@@ -86,6 +87,9 @@ export default function EditWebhookForm({
         channelIds: selectedChannels.map((s) => s.channelId),
         channelFilters: Object.fromEntries(
           selectedChannels.map((s) => [s.channelId, s.filter])
+        ),
+        channelLevels: Object.fromEntries(
+          selectedChannels.map((s) => [s.channelId, s.level])
         ),
         titleTemplate: titleTemplate || null,
         messageTemplate: messageTemplate || null,

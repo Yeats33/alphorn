@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   loggerInfo: vi.fn(),
   loggerWarn: vi.fn(),
   loggerError: vi.fn(),
+  advanceFailover: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -36,6 +37,10 @@ vi.mock("@/lib/logger", () => {
   return { logger };
 });
 
+vi.mock("@/worker/failover", () => ({
+  advanceFailoverIfLevelFailed: mocks.advanceFailover,
+}));
+
 describe("startSweep", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -46,6 +51,7 @@ describe("startSweep", () => {
     mocks.loggerInfo.mockReset();
     mocks.loggerWarn.mockReset();
     mocks.loggerError.mockReset();
+    mocks.advanceFailover.mockReset().mockResolvedValue({ state: "exhausted" });
   });
 
   afterEach(() => {
@@ -55,7 +61,12 @@ describe("startSweep", () => {
   it("marks stale deliveries and re-enqueues orphaned ones on each interval", async () => {
     const insert = vi.fn().mockResolvedValue(undefined);
     mocks.updateMany.mockResolvedValue({ count: 2 });
-    mocks.findMany.mockResolvedValue([{ id: "del_1" }, { id: "del_2" }]);
+    mocks.findMany
+      .mockResolvedValueOnce([
+        { id: "del_1", messageId: "msg_1", level: 1 },
+        { id: "del_2", messageId: "msg_1", level: 1 },
+      ])
+      .mockResolvedValueOnce([{ id: "del_1" }, { id: "del_2" }]);
     mocks.getQueue.mockResolvedValue({ insert });
 
     const { startSweep } = await import("@/worker/sweep");
@@ -65,9 +76,9 @@ describe("startSweep", () => {
 
     expect(mocks.updateMany).toHaveBeenCalledWith({
       where: {
+        id: { in: ["del_1", "del_2"] },
         status: "PENDING",
         attempts: 0,
-        createdAt: { lt: new Date("2026-04-08T11:56:00.000Z") },
       },
       data: {
         status: "STALE",
@@ -78,7 +89,7 @@ describe("startSweep", () => {
       where: {
         status: "PENDING",
         attempts: 0,
-        createdAt: {
+        updatedAt: {
           lt: new Date("2026-04-08T11:59:00.000Z"),
           gte: new Date("2026-04-08T11:56:00.000Z"),
         },
@@ -90,6 +101,11 @@ describe("startSweep", () => {
       { data: { deliveryId: "del_1" } },
       { data: { deliveryId: "del_2" } },
     ]);
+    expect(mocks.advanceFailover).toHaveBeenCalledOnce();
+    expect(mocks.advanceFailover).toHaveBeenCalledWith({
+      messageId: "msg_1",
+      failedLevel: 1,
+    });
   });
 
   it("skips queue startup when there are no orphaned deliveries", async () => {
@@ -105,6 +121,9 @@ describe("startSweep", () => {
   });
 
   it("catches and logs sweep failures without throwing", async () => {
+    mocks.findMany.mockResolvedValue([
+      { id: "del_1", messageId: "msg_1", level: 1 },
+    ]);
     mocks.updateMany.mockRejectedValue(new Error("db issue"));
 
     const { startSweep } = await import("@/worker/sweep");
@@ -118,6 +137,9 @@ describe("startSweep", () => {
   });
 
   it("stringifies non-Error failures when logging", async () => {
+    mocks.findMany.mockResolvedValue([
+      { id: "del_1", messageId: "msg_1", level: 1 },
+    ]);
     mocks.updateMany.mockRejectedValue("boom");
 
     const { startSweep } = await import("@/worker/sweep");

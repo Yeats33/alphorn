@@ -20,6 +20,7 @@ export interface CachedWebhook {
     channelId: string;
     enabled: boolean;
     filter: unknown;
+    level: number;
     channel: { id: string; enabled: boolean };
   }>;
   subscription: {
@@ -211,6 +212,7 @@ async function fetchWebhook(publicId: string): Promise<CachedWebhook | null> {
       channelId: wc.channelId,
       enabled: wc.enabled,
       filter: wc.filter,
+      level: wc.level,
       channel: { id: wc.channel.id, enabled: wc.channel.enabled },
     })),
     subscription,

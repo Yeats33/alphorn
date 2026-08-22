@@ -117,6 +117,7 @@ export type FilterField = (typeof FILTER_FIELDS)[number];
 export interface ChannelSelection {
   channelId: string;
   filter: FilterDefinition | null;
+  level: number;
 }
 
 /**

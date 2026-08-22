@@ -21,6 +21,7 @@ import { showError } from "@/lib/toast-error";
 interface Delivery {
   id: string;
   channelId: string;
+  level: number;
   status: string;
   attempts: number;
   lastError: string | null;
@@ -39,7 +40,11 @@ export function DeliveriesTable({
   const [refreshing, setRefreshing] = useState(false);
 
   const hasPending = deliveries.some(
-    (d) => d.status === "PENDING" || d.status === "PROCESSING"
+    (d) =>
+      d.status === "WAITING" ||
+      d.status === "PENDING" ||
+      d.status === "PROCESSING" ||
+      d.status === "RETRYING"
   );
 
   const loadDeliveries = useCallback(async () => {
@@ -100,6 +105,7 @@ export function DeliveriesTable({
         <TableRow>
           <TableHead>Channel</TableHead>
           <TableHead>Type</TableHead>
+          <TableHead>Level</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Attempts</TableHead>
           <TableHead>Error</TableHead>
@@ -120,6 +126,7 @@ export function DeliveriesTable({
             <TableCell className="text-muted-foreground">
               {d.channel.type}
             </TableCell>
+            <TableCell>{d.level}</TableCell>
             <TableCell>
               <StatusBadge status={d.status} />
             </TableCell>
@@ -128,7 +135,9 @@ export function DeliveriesTable({
               {d.lastError && <ExpandableError error={d.lastError} />}
             </TableCell>
             <TableCell className="text-right">
-              {d.status === "PENDING" || d.status === "PROCESSING" ? (
+              {d.status === "PENDING" ||
+              d.status === "PROCESSING" ||
+              d.status === "RETRYING" ? (
                 <Button size="sm" variant="outline" disabled className="gap-1">
                   <Loader2 data-icon="inline-start" className="animate-spin" />
                   Processing

@@ -163,11 +163,14 @@ model InviteLink {
 // ============================================================
 
 enum DeliveryStatus {
+  WAITING
   PENDING
   PROCESSING
+  RETRYING
   DELIVERED
   FAILED
   STALE
+  SKIPPED
 }
 
 model Webhook {
@@ -220,6 +223,7 @@ model WebhookChannel {
   channelId String
   filter    Json?
   enabled   Boolean @default(true)
+  level     Int     @default(1)
   webhook   Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
   channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
@@ -248,6 +252,7 @@ model Delivery {
   message     Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
   channelId   String
   channel     Channel        @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  level       Int            @default(1)
   status      DeliveryStatus @default(PENDING)
   attempts    Int            @default(0)
   lastError   String?
@@ -257,6 +262,7 @@ model Delivery {
   updatedAt   DateTime       @updatedAt
 
   @@index([messageId, createdAt])
+  @@index([messageId, level, status])
   @@index([channelId, status, createdAt])
   @@index([status, createdAt])
 }

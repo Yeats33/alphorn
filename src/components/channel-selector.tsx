@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { FilterBuilder } from "@/components/filter-builder";
 import { FilterTestPanel } from "@/components/filter-test-panel";
 import { ChannelIcon } from "@/components/channel-icons";
@@ -34,7 +35,7 @@ export function ChannelSelector({
       onChange(selected.filter((s) => s.channelId !== id));
       if (expandedChannel === id) setExpandedChannel(null);
     } else {
-      onChange([...selected, { channelId: id, filter: null }]);
+      onChange([...selected, { channelId: id, filter: null, level: 1 }]);
     }
   }
 
@@ -48,6 +49,20 @@ export function ChannelSelector({
 
   function getFilter(channelId: string): FilterDefinition | null {
     return selected.find((s) => s.channelId === channelId)?.filter ?? null;
+  }
+
+  function updateLevel(channelId: string, value: string) {
+    const level = Number(value);
+    if (!Number.isInteger(level) || level < 1 || level > 99) return;
+    onChange(
+      selected.map((selection) =>
+        selection.channelId === channelId ? { ...selection, level } : selection
+      )
+    );
+  }
+
+  function getLevel(channelId: string): number {
+    return selected.find((s) => s.channelId === channelId)?.level ?? 1;
   }
 
   if (channels.length === 0) {
@@ -90,6 +105,9 @@ export function ChannelSelector({
                       <Filter className="h-3 w-3" /> Filtered
                     </Badge>
                   )}
+                  <Badge variant="outline" className="text-xs">
+                    Level {getLevel(ch.id)}
+                  </Badge>
                   <Button
                     type="button"
                     variant="ghost"
@@ -112,6 +130,25 @@ export function ChannelSelector({
 
             {isSelected && isExpanded && (
               <div className="border-t px-3 pb-3 pt-2 space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor={`channel-level-${ch.id}`}>
+                    Failover level
+                  </Label>
+                  <Input
+                    id={`channel-level-${ch.id}`}
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={getLevel(ch.id)}
+                    onChange={(event) => updateLevel(ch.id, event.target.value)}
+                    className="w-24"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Channels at the same level send in parallel. The next
+                    configured level starts only if every channel in this level
+                    ultimately fails.
+                  </p>
+                </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-2">
                     Filter — only deliver messages that match:

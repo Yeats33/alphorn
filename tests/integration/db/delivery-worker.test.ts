@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { nanoid } from "nanoid";
 import { prisma } from "@/lib/db";
 import { handleDelivery } from "@/worker/deliver";
 import { createDeliveryFixture } from "../helpers/factories";
+import { DELIVERY_QUEUE, getQueue } from "@/lib/queue";
 import {
   setTestChannelBehavior,
   testChannelCalls,
@@ -12,6 +14,31 @@ const MAX_RETRIES = 5;
 async function getDelivery(id: string) {
   const row = await prisma.delivery.findUniqueOrThrow({ where: { id } });
   return row;
+}
+
+async function addDelivery(
+  fixture: Awaited<ReturnType<typeof createDeliveryFixture>>,
+  level: number,
+  status: "PENDING" | "WAITING",
+) {
+  const channel = await prisma.channel.create({
+    data: {
+      id: `ch_${nanoid(10)}`,
+      name: `Fallback level ${level}`,
+      type: "integration-test-channel",
+      config: { label: `level-${level}` },
+      publicId: nanoid(12),
+      organizationId: fixture.organizationId,
+    },
+  });
+  return prisma.delivery.create({
+    data: {
+      messageId: fixture.messageId,
+      channelId: channel.id,
+      level,
+      status,
+    },
+  });
 }
 
 describe("handleDelivery — worker integration", () => {
@@ -39,7 +66,7 @@ describe("handleDelivery — worker integration", () => {
     await expect(handleDelivery({ deliveryId })).rejects.toThrow("gateway 502");
 
     const row = await getDelivery(deliveryId);
-    expect(row.status).toBe("FAILED");
+    expect(row.status).toBe("RETRYING");
     expect(row.attempts).toBe(1);
     expect(row.lastError).toBe("gateway 502");
     expect(row.deliveredAt).toBeNull();
@@ -107,5 +134,60 @@ describe("handleDelivery — worker integration", () => {
 
     const [call] = testChannelCalls();
     expect(call!.context.trace).toEqual(trace);
+  });
+
+  it("skips later levels when any delivery in the active level succeeds", async () => {
+    const fixture = await createDeliveryFixture();
+    const standby = await addDelivery(fixture, 2, "WAITING");
+
+    await handleDelivery({ deliveryId: fixture.deliveryId });
+
+    expect((await getDelivery(fixture.deliveryId)).status).toBe("DELIVERED");
+    expect((await getDelivery(standby.id)).status).toBe("SKIPPED");
+    expect(testChannelCalls()).toHaveLength(1);
+  });
+
+  it("promotes the next level exactly once after every active delivery fails", async () => {
+    const fixture = await createDeliveryFixture();
+    const peer = await addDelivery(fixture, 1, "PENDING");
+    const fallback = await addDelivery(fixture, 2, "WAITING");
+    setTestChannelBehavior({ kind: "permanent", message: "provider down" });
+
+    await Promise.all([
+      handleDelivery({ deliveryId: fixture.deliveryId }),
+      handleDelivery({ deliveryId: peer.id }),
+    ]);
+
+    expect((await getDelivery(fixture.deliveryId)).status).toBe("FAILED");
+    expect((await getDelivery(peer.id)).status).toBe("FAILED");
+    expect((await getDelivery(fallback.id)).status).toBe("PENDING");
+
+    const boss = await getQueue();
+    const jobs = await boss.findJobs<{ deliveryId: string }>(DELIVERY_QUEUE, {
+      queued: true,
+    });
+    expect(
+      jobs.filter((job) => job.data.deliveryId === fallback.id),
+    ).toHaveLength(1);
+
+    setTestChannelBehavior({ kind: "success" });
+    await handleDelivery({ deliveryId: fallback.id });
+    expect((await getDelivery(fallback.id)).status).toBe("DELIVERED");
+  });
+
+  it("does not promote while another delivery in the level is waiting to retry", async () => {
+    const fixture = await createDeliveryFixture();
+    await addDelivery(fixture, 1, "PENDING").then((delivery) =>
+      prisma.delivery.update({
+        where: { id: delivery.id },
+        data: { status: "RETRYING", attempts: 1 },
+      }),
+    );
+    const fallback = await addDelivery(fixture, 2, "WAITING");
+    setTestChannelBehavior({ kind: "permanent", message: "invalid config" });
+
+    await handleDelivery({ deliveryId: fixture.deliveryId });
+
+    expect((await getDelivery(fallback.id)).status).toBe("WAITING");
   });
 });

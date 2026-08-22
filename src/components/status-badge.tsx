@@ -16,6 +16,14 @@ export function StatusBadge({ status }: { status: string }) {
           Processing
         </Badge>
       );
+    case "RETRYING":
+      return (
+        <Badge className="border-warning/20 bg-warning-muted text-warning hover:bg-warning-muted">
+          Retrying
+        </Badge>
+      );
+    case "WAITING":
+      return <Badge variant="outline">Standby</Badge>;
     case "PENDING":
       return <Badge variant="secondary">Pending</Badge>;
     case "STALE":
@@ -24,6 +32,8 @@ export function StatusBadge({ status }: { status: string }) {
           Stale
         </Badge>
       );
+    case "SKIPPED":
+      return <Badge variant="secondary">Skipped</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }

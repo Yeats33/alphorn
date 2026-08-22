@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getQueue, DELIVERY_QUEUE } from "@/lib/queue";
 import { logger as rootLogger } from "@/lib/logger";
+import { advanceFailoverIfLevelFailed } from "./failover";
 
 const logger = rootLogger.child({ component: "worker", task: "sweep" });
 
@@ -27,17 +28,29 @@ export function startSweep() {
 }
 
 /**
- * Deliveries still PENDING with 0 attempts after 5 minutes are beyond recovery.
+ * Deliveries still PENDING with 0 attempts five minutes after creation or
+ * failover activation are beyond recovery.
  * Mark them STALE so they show up in the dashboard as undelivered.
  */
 async function markStaleDeliveries() {
   const staleThreshold = new Date(Date.now() - STALE_AFTER_MS);
 
-  const { count } = await prisma.delivery.updateMany({
+  const candidates = await prisma.delivery.findMany({
     where: {
       status: "PENDING",
       attempts: 0,
-      createdAt: { lt: staleThreshold },
+      updatedAt: { lt: staleThreshold },
+    },
+    select: { id: true, messageId: true, level: true },
+    take: 500,
+  });
+  if (candidates.length === 0) return;
+
+  const { count } = await prisma.delivery.updateMany({
+    where: {
+      id: { in: candidates.map((delivery) => delivery.id) },
+      status: "PENDING",
+      attempts: 0,
     },
     data: {
       status: "STALE",
@@ -47,11 +60,26 @@ async function markStaleDeliveries() {
 
   if (count > 0) {
     logger.warn({ count, staleDurationMs: STALE_AFTER_MS }, "Marked stale deliveries");
+    const levels = new Map<string, { messageId: string; level: number }>();
+    for (const delivery of candidates) {
+      levels.set(`${delivery.messageId}:${delivery.level}`, {
+        messageId: delivery.messageId,
+        level: delivery.level,
+      });
+    }
+    await Promise.all(
+      Array.from(levels.values()).map(({ messageId, level }) =>
+        advanceFailoverIfLevelFailed({
+          messageId,
+          failedLevel: level,
+        }),
+      ),
+    );
   }
 }
 
 /**
- * Deliveries PENDING with 0 attempts between 2–5 minutes old get re-enqueued.
+ * Deliveries PENDING with 0 attempts for 2–5 minutes get re-enqueued.
  * They were likely created in the DB but the pg-boss insert failed.
  */
 async function reenqueueOrphanedDeliveries() {
@@ -62,7 +90,7 @@ async function reenqueueOrphanedDeliveries() {
     where: {
       status: "PENDING",
       attempts: 0,
-      createdAt: {
+      updatedAt: {
         lt: reenqueueThreshold,
         gte: staleThreshold,
       },

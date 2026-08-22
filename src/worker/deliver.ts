@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getChannel } from "@/channels";
 import { isPermanentChannelError } from "@/channels/errors";
 import { notifyFailure } from "./failure-notifier";
+import { advanceFailoverIfLevelFailed } from "./failover";
 import type { Notification } from "@/channels/types";
 import { logger as rootLogger } from "@/lib/logger";
 
@@ -18,16 +19,16 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
     deliveryId: data.deliveryId,
   });
 
-  // Idempotency: only claim PENDING/FAILED rows. A DELIVERED row means the
-  // channel already accepted this notification (pg-boss can redeliver after a
-  // crash between send success and job ack); a PROCESSING row means another
-  // worker is already handling it. Either way, do not re-send. Claiming
+  // Idempotency: only claim PENDING/RETRYING rows. DELIVERED means the channel
+  // already accepted this notification, FAILED is terminal, and PROCESSING
+  // means another worker is already handling it. In all three cases, do not
+  // re-send. Claiming
   // before loading the full delivery (incl. the message's jsonb payload)
   // avoids that load on the common already-delivered-redelivery path.
   const claim = await prisma.delivery.updateMany({
     where: {
       id: data.deliveryId,
-      status: { in: ["PENDING", "FAILED"] },
+      status: { in: ["PENDING", "RETRYING"] },
     },
     data: {
       status: "PROCESSING",
@@ -83,6 +84,12 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
         lastError: `Unknown channel type: ${delivery.channel.type}`,
       },
     });
+    await advanceFailoverIfLevelFailed({
+      messageId: delivery.messageId,
+      failedLevel: delivery.level,
+      trace: data.trace,
+    });
+    await notifyFailure(delivery.id);
     return;
   }
 
@@ -109,30 +116,47 @@ export async function handleDelivery(data: DeliveryJobData): Promise<void> {
         deliveredAt: new Date(),
       },
     });
+    await prisma.delivery.updateMany({
+      where: {
+        messageId: delivery.messageId,
+        status: "WAITING",
+      },
+      data: { status: "SKIPPED" },
+    });
 
     jobLogger.debug({ channelName: delivery.channel.name }, "Delivery succeeded");
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error";
 
+    const permanent = isPermanentChannelError(err);
+    const terminal = permanent || delivery.attempts >= MAX_RETRIES;
     const updated = await prisma.delivery.update({
       where: { id: delivery.id },
       data: {
-        status: "FAILED",
+        status: terminal ? "FAILED" : "RETRYING",
         lastError: errorMessage,
       },
     });
 
-    const permanent = isPermanentChannelError(err);
-
     if (permanent) {
       jobLogger.error({ error: errorMessage, err, attempts: updated.attempts }, "Delivery permanently failed (non-retryable)");
+      await advanceFailoverIfLevelFailed({
+        messageId: delivery.messageId,
+        failedLevel: delivery.level,
+        trace: data.trace,
+      });
       await notifyFailure(delivery.id);
       return;
     }
 
-    if (updated.attempts >= MAX_RETRIES) {
+    if (terminal) {
       jobLogger.error({ error: errorMessage, err, attempts: updated.attempts, maxRetries: MAX_RETRIES }, "Delivery permanently failed");
+      await advanceFailoverIfLevelFailed({
+        messageId: delivery.messageId,
+        failedLevel: delivery.level,
+        trace: data.trace,
+      });
       await notifyFailure(delivery.id);
     } else {
       jobLogger.warn({ error: errorMessage, attempts: updated.attempts }, "Delivery failed, will retry");

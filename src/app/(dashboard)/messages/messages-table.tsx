@@ -64,9 +64,12 @@ const PRIORITY_BADGE_VARIANT: Record<
 const DELIVERY_STATUSES: Record<string, string> = {
   PENDING: "Pending",
   PROCESSING: "Processing",
+  RETRYING: "Retrying",
+  WAITING: "Standby",
   DELIVERED: "Delivered",
   FAILED: "Failed",
   STALE: "Stale",
+  SKIPPED: "Skipped",
 };
 
 interface Webhook {

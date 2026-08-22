@@ -123,7 +123,7 @@ export async function getMessageById(id: string) {
       webhook: { select: { name: true } },
       deliveries: {
         include: { channel: { select: { id: true, name: true, type: true } } },
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ level: "asc" }, { createdAt: "asc" }],
       },
     },
   });
@@ -140,13 +140,22 @@ export async function resendDelivery(deliveryId: string) {
   });
 
   if (!delivery) throw new Error("Delivery not found");
-  if (delivery.status === "PENDING" || delivery.status === "PROCESSING") {
+  if (
+    delivery.status === "PENDING" ||
+    delivery.status === "PROCESSING" ||
+    delivery.status === "RETRYING"
+  ) {
     throw new Error("Delivery is already in progress");
   }
 
   await prisma.delivery.update({
     where: { id: deliveryId },
-    data: { status: "PENDING", lastError: null },
+    data: {
+      status: "PENDING",
+      attempts: 0,
+      lastError: null,
+      deliveredAt: null,
+    },
   });
 
   const queue = await getQueue();
@@ -164,7 +173,7 @@ export async function getMessageDeliveries(messageId: string) {
       channel: { organizationId: orgId },
     },
     include: { channel: { select: { id: true, name: true, type: true } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ level: "asc" }, { createdAt: "asc" }],
   });
 }
 
@@ -206,6 +215,7 @@ export async function sendTestMessage(
   };
   const enabledChannels = webhook.channels.filter(
     (wc) =>
+      wc.enabled &&
       wc.channel.enabled &&
       evaluateFilter(filterMessage, wc.filter as FilterDefinition | null),
   );
@@ -220,7 +230,10 @@ export async function sendTestMessage(
     priority: priority ?? null,
     tags: normalizedTags,
     payload,
-    channelIds: enabledChannels.map((wc) => wc.channelId),
+    channels: enabledChannels.map((wc) => ({
+      channelId: wc.channelId,
+      level: wc.level,
+    })),
   });
 
   revalidatePath("/messages");
@@ -258,7 +271,9 @@ export async function getDashboardStats() {
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'DELIVERED')::bigint AS delivered,
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'FAILED')::bigint AS failed,
         COUNT(*) FILTER (WHERE "Delivery"."status" = 'STALE')::bigint AS stale,
-        COUNT(*) FILTER (WHERE "Delivery"."status" IN ('PENDING', 'PROCESSING'))::bigint AS pending
+        COUNT(*) FILTER (
+          WHERE "Delivery"."status" IN ('WAITING', 'PENDING', 'PROCESSING', 'RETRYING')
+        )::bigint AS pending
       FROM "Delivery"
       JOIN "Channel" ON "Delivery"."channelId" = "Channel"."id"
       WHERE "Channel"."organizationId" = ${orgId}

@@ -22,6 +22,24 @@ const webhookTemplatesSchema = z.object({
   priorityTemplate: templateStringSchema,
 });
 
+const channelLevelSchema = z.number().int().min(1).max(99);
+
+function channelLevel(
+  channelId: string,
+  channelLevels?: Record<string, number>,
+): number {
+  return channelLevelSchema.parse(channelLevels?.[channelId] ?? 1);
+}
+
+function validateChannelLevels(
+  channelIds: string[],
+  channelLevels?: Record<string, number>,
+): void {
+  for (const channelId of channelIds) {
+    channelLevel(channelId, channelLevels);
+  }
+}
+
 function validateFilters(channelFilters?: Record<string, FilterDefinition | null>) {
   if (!channelFilters) return;
   for (const filter of Object.values(channelFilters)) {
@@ -78,6 +96,7 @@ export async function createWebhook(data: {
   requireAuth?: boolean;
   channelIds: string[];
   channelFilters?: Record<string, FilterDefinition | null>;
+  channelLevels?: Record<string, number>;
   titleTemplate?: string | null;
   messageTemplate?: string | null;
   tagsTemplate?: string | null;
@@ -98,6 +117,7 @@ export async function createWebhook(data: {
   }
 
   validateFilters(data.channelFilters);
+  validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
 
   const templates = webhookTemplatesSchema.parse({
@@ -124,6 +144,7 @@ export async function createWebhook(data: {
         create: data.channelIds.map((channelId) => ({
           channelId,
           filter: data.channelFilters?.[channelId] ?? undefined,
+          level: channelLevel(channelId, data.channelLevels),
         })),
       },
     },
@@ -142,6 +163,7 @@ export async function updateWebhook(
     requireAuth: boolean;
     channelIds: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
+    channelLevels?: Record<string, number>;
     titleTemplate?: string | null;
     messageTemplate?: string | null;
     tagsTemplate?: string | null;
@@ -156,6 +178,7 @@ export async function updateWebhook(
   if (!existing) throw new Error("Webhook not found");
 
   validateFilters(data.channelFilters);
+  validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
 
   const templates = webhookTemplatesSchema.parse({
@@ -182,6 +205,7 @@ export async function updateWebhook(
           create: data.channelIds.map((channelId) => ({
             channelId,
             filter: data.channelFilters?.[channelId] ?? undefined,
+            level: channelLevel(channelId, data.channelLevels),
           })),
         },
       },
@@ -246,6 +270,7 @@ export async function updateWebhookChannels(
   data: {
     channelIds: string[];
     channelFilters?: Record<string, FilterDefinition | null>;
+    channelLevels?: Record<string, number>;
   }
 ) {
   const { orgId } = await requireAdminOrOwner();
@@ -256,6 +281,7 @@ export async function updateWebhookChannels(
   if (!existing) throw new Error("Webhook not found");
 
   validateFilters(data.channelFilters);
+  validateChannelLevels(data.channelIds, data.channelLevels);
   await assertChannelsBelongToOrg(data.channelIds, orgId);
 
   await prisma.$transaction([
@@ -266,6 +292,7 @@ export async function updateWebhookChannels(
           webhookId,
           channelId,
           filter: data.channelFilters?.[channelId] ?? undefined,
+          level: channelLevel(channelId, data.channelLevels),
         },
       })
     ),

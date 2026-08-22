@@ -52,6 +52,7 @@ function buildRow(overrides: Record<string, unknown> = {}) {
         channelId: "ch_1",
         enabled: true,
         filter: null,
+        level: 1,
         channel: { id: "ch_1", enabled: true },
       },
     ],

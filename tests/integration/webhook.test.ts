@@ -70,6 +70,7 @@ type MockWebhook = {
     channelId: string;
     enabled: boolean;
     filter: unknown;
+    level?: number;
     channel: { id: string; enabled: boolean };
   }>;
   subscription: {
@@ -84,7 +85,7 @@ type MockWebhook = {
 };
 
 function buildWebhook(overrides: Partial<MockWebhook> = {}): MockWebhook {
-  return {
+  const webhook = {
     id: "wh_1",
     organizationId: "org_1",
     publicId: "public_1",
@@ -106,6 +107,13 @@ function buildWebhook(overrides: Partial<MockWebhook> = {}): MockWebhook {
       purchasedPacks: 0,
     },
     ...overrides,
+  };
+  return {
+    ...webhook,
+    channels: webhook.channels.map((channel) => ({
+      ...channel,
+      level: channel.level ?? 1,
+    })),
   };
 }
 
@@ -277,7 +285,7 @@ describe("POST /n/:publicId — webhook receiver", () => {
         tags: "infra",
         extra: { region: "eu-west-1" },
       },
-      channelIds: ["ch_enabled"],
+      channels: [{ channelId: "ch_enabled", level: 1 }],
       trace: ["public_1"],
     });
   });
@@ -324,7 +332,7 @@ describe("POST /n/:publicId — webhook receiver", () => {
         attachments: [{ title: "Slack title" }],
         tags: ["ops", 123],
       },
-      channelIds: [],
+      channels: [],
       trace: ["public_1"],
     });
   });
@@ -356,7 +364,7 @@ describe("POST /n/:publicId — webhook receiver", () => {
       priority: null,
       tags: ["ops", "urgent"],
       payload: null,
-      channelIds: [],
+      channels: [],
       trace: ["public_1"],
     });
   });

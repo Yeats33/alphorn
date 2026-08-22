@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   updateManyDelivery: vi.fn(),
   getChannel: vi.fn(),
   notifyFailure: vi.fn(),
+  advanceFailover: vi.fn(),
   loggerChild: vi.fn(),
 }));
 
@@ -27,6 +28,10 @@ vi.mock("@/worker/failure-notifier", () => ({
   notifyFailure: mocks.notifyFailure,
 }));
 
+vi.mock("@/worker/failover", () => ({
+  advanceFailoverIfLevelFailed: mocks.advanceFailover,
+}));
+
 vi.mock("@/lib/logger", () => {
   const logger = {
     child: mocks.loggerChild,
@@ -45,6 +50,7 @@ function makeDelivery(overrides: Record<string, unknown> = {}) {
     channelId: "ch_1",
     messageId: "msg_1",
     attempts: 0,
+    level: 1,
     channel: {
       id: "ch_1",
       type: "slack",
@@ -70,6 +76,7 @@ describe("handleDelivery", () => {
     mocks.updateManyDelivery.mockReset().mockResolvedValue({ count: 1 });
     mocks.getChannel.mockReset();
     mocks.notifyFailure.mockReset();
+    mocks.advanceFailover.mockReset().mockResolvedValue({ state: "exhausted" });
   });
 
   it("throws when the delivery record does not exist", async () => {
@@ -93,7 +100,7 @@ describe("handleDelivery", () => {
     expect(mocks.updateManyDelivery).toHaveBeenCalledWith({
       where: {
         id: "del_1",
-        status: { in: ["PENDING", "FAILED"] },
+        status: { in: ["PENDING", "RETRYING"] },
       },
       data: {
         status: "PROCESSING",
@@ -106,6 +113,11 @@ describe("handleDelivery", () => {
         status: "FAILED",
         lastError: "Unknown channel type: slack",
       },
+    });
+    expect(mocks.advanceFailover).toHaveBeenCalledWith({
+      messageId: "msg_1",
+      failedLevel: 1,
+      trace: undefined,
     });
   });
 
@@ -208,7 +220,7 @@ describe("handleDelivery", () => {
     expect(mocks.updateDelivery).toHaveBeenLastCalledWith({
       where: { id: "del_1" },
       data: {
-        status: "FAILED",
+        status: "RETRYING",
         lastError: "temporary failure",
       },
     });
@@ -218,7 +230,7 @@ describe("handleDelivery", () => {
     const error = new Error("permanent failure");
     const send = vi.fn().mockRejectedValue(error);
 
-    mocks.findDelivery.mockResolvedValue(makeDelivery({ attempts: 4 }));
+    mocks.findDelivery.mockResolvedValue(makeDelivery({ attempts: 5 }));
     mocks.getChannel.mockReturnValue({ configSchema: { parse: (c: unknown) => c }, send });
     mocks.updateDelivery.mockResolvedValue({ attempts: 5 });
 
@@ -228,6 +240,11 @@ describe("handleDelivery", () => {
     ).resolves.toBeUndefined();
 
     expect(mocks.notifyFailure).toHaveBeenCalledWith("del_1");
+    expect(mocks.advanceFailover).toHaveBeenCalledWith({
+      messageId: "msg_1",
+      failedLevel: 1,
+      trace: undefined,
+    });
   });
 
   it("does not retry permanent channel errors and notifies immediately", async () => {
@@ -247,6 +264,11 @@ describe("handleDelivery", () => {
 
     expect(send).toHaveBeenCalledTimes(1);
     expect(mocks.notifyFailure).toHaveBeenCalledWith("del_1");
+    expect(mocks.advanceFailover).toHaveBeenCalledWith({
+      messageId: "msg_1",
+      failedLevel: 1,
+      trace: undefined,
+    });
     expect(mocks.updateDelivery).toHaveBeenLastCalledWith({
       where: { id: "del_1" },
       data: {
@@ -269,7 +291,7 @@ describe("handleDelivery", () => {
     expect(mocks.updateDelivery).toHaveBeenLastCalledWith({
       where: { id: "del_1" },
       data: {
-        status: "FAILED",
+        status: "RETRYING",
         lastError: "Unknown error",
       },
     });
